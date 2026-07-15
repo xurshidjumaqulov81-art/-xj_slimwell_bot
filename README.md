@@ -1,41 +1,38 @@
-# XJ SlimWell Telegram Bot
+# XJ SlimWell Bot v3
 
-Premium ko‘rinishdagi Telegram sog‘lom odatlar yordamchisi.
+Ixcham, menyuli Telegram bot.
 
-## Funksiyalar
+## Asosiy imkoniyatlar
 
-- Profil: avtomatik 7 xonali SlimWell ID, ism, yosh, jins, bo‘y, vazn, maqsad
-- BMI, sog‘lom vazn oralig‘i va taxminiy kaloriya ehtiyoji
-- 3 mahal kunlik va 7 kunlik ovqatlanish rejasi
-- Ovqat suratini OpenAI orqali taxminiy tahlil qilish
-- Suv, qadam, uyqu va mashqlarni qayd etish
-- SlimWell katalog ma’lumotlari
-- Natijalar va admin kuzatuvi
+- `/start` dan keyin O‘zbek/Rus tilini tanlash
+- Foydalanuvchi o‘zi kiritadigan noyob 7 xonali shaxsiy ID
+- Profil: ism, yosh, jins, bo‘y, vazn, maqsad, faollik
+- BMI ikki xonali aniqlikda
+- Animatsion BMI o‘lchagich va jinsga mos tana rasmi
+- Norma vazn oralig‘i (BMI 18.5–24.9) va ideal vazn (BMI 22)
+- Faollikka mos kaloriya hisobi
+- 3 mahal kunlik/haftalik menyu
+- Ovqat suratidan taxminiy kaloriya
+- SlimWell bo‘limi: qabul rejasi, tarkib, saqlash, sertifikatlar
+- BMI ga mos 3 ta uy mashqi va animatsiyalar
+- Suv, qadam, uyqu, vazn va natijalar
+- Admin: foydalanuvchini 7 xonali ID bilan topish
 
 ## Railway Variables
 
 ```env
-BOT_TOKEN=Telegram BotFather tokeni
-OPENAI_API_KEY=OpenAI API kaliti
+BOT_TOKEN=...
+OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-4o-mini
-DATABASE_URL=Railway PostgreSQL bergan URL
-ADMIN_IDS=telegram_id_1,telegram_id_2
-START_ID=12345
+DATABASE_URL=...
+ADMIN_IDS=123456789
 ```
 
-`DATABASE_URL` `postgres://` yoki `postgresql://` bilan boshlansa, dastur avtomatik ravishda asyncpg formatiga o‘giradi.
+`DATABASE_URL` Railway PostgreSQL bergan qiymat bo‘lishi mumkin.
+Token va kalitlarni GitHub kodiga yozmang.
 
-## Ishga tushirish
+## Muhim sozlama
 
-```bash
-pip install -r requirements.txt
-cp .env.example .env
-python -m app.main
-```
-
-## Muhim
-
-- Token va API kalitini GitHub’ga yuklamang.
-- Ovqat rasmi va kaloriyalar taxminiy hisoblanadi.
-- Bot tibbiy tashxis bermaydi.
-- 18 yoshdan kichik foydalanuvchilarga vazn kamaytirish kaloriyasi avtomatik berilmaydi.
+SlimWell qabul rejasi `app/content.py` ichida. Hozir u katalogdan olingan
+2 yoki 3 kapsulalik reja bilan cheklangan va yorliqdagi 3 kapsuladan oshmaydi.
+Mahsulotning tasdiqlangan yo‘riqnomasi o‘zgarsa, shu fayl yangilanadi.
