@@ -1,17 +1,12 @@
 import asyncio
 import logging
 
-from aiogram import Bot, Dispatcher
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-
-from app.config import get_settings
+from app.database.db import init_db
 from app.handlers import router
+from app.loader import bot, dispatcher
 
 
 async def main() -> None:
-    settings = get_settings()
-
     logging.basicConfig(
         level=logging.INFO,
         format=(
@@ -20,14 +15,8 @@ async def main() -> None:
         ),
     )
 
-    bot = Bot(
-        token=settings.bot_token,
-        default=DefaultBotProperties(
-            parse_mode=ParseMode.HTML,
-        ),
-    )
+    await init_db()
 
-    dispatcher = Dispatcher()
     dispatcher.include_router(router)
 
     await bot.delete_webhook(
