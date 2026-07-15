@@ -1,94 +1,94 @@
 from dataclasses import dataclass
+from app.content import BMI_PLANS
 
 
-@dataclass
-class BodyMetrics:
+ACTIVITY = {
+    "low": 1.2,
+    "light": 1.375,
+    "medium": 1.55,
+    "high": 1.725,
+}
+
+
+@dataclass(frozen=True)
+class Metrics:
     bmi: float
-    min_weight: float
-    max_weight: float
-    reference_weight: float
+    category_key: str
+    normal_min: float
+    normal_max: float
+    ideal_weight: float
     maintenance_kcal: int
     target_kcal: int | None
+    protein_g: int
+    fat_g: int
+    carbs_g: int
 
 
-def calculate_metrics(
-    age: int,
-    gender: str,
-    height_cm: float,
-    weight_kg: float,
-    goal: str,
-) -> BodyMetrics:
-    height_m = height_cm / 100
-    bmi = weight_kg / (height_m ** 2)
+def category_key(bmi: float) -> str:
+    if bmi < 18.5:
+        return "normal"
+    if bmi < 25:
+        return "normal"
+    if bmi < 30:
+        return "overweight"
+    if bmi < 35:
+        return "obesity1"
+    if bmi < 40:
+        return "obesity2"
+    return "obesity3"
 
-    # Kattalar uchun umumiy BMI 18.5–24.9 oralig‘i.
-    min_weight = 18.5 * height_m ** 2
-    max_weight = 24.9 * height_m ** 2
 
-    # Katalogdagi namuna formulasi: 22 × bo‘y².
-    reference_weight = 22 * height_m ** 2
+def calculate(user) -> Metrics:
+    h = user.height_cm / 100
+    bmi = user.current_weight_kg / (h * h)
+    normal_min = 18.5 * h * h
+    normal_max = 24.9 * h * h
+    ideal = 22 * h * h
 
-    # Mifflin–St Jeor. Faollik profilda olinmagani uchun yengil koeffitsiyent.
-    sex_adjustment = 5 if gender == "Erkak" else -161
-    bmr = 10 * weight_kg + 6.25 * height_cm - 5 * age + sex_adjustment
-    maintenance = round(bmr * 1.35)
+    sex = 5 if user.gender == "male" else -161
+    bmr = 10 * user.current_weight_kg + 6.25 * user.height_cm - 5 * user.age + sex
+    maintenance = round(bmr * ACTIVITY.get(user.activity or "low", 1.2))
 
     target = maintenance
-    if age >= 18 and goal == "Vaznni kamaytirish":
-        # Keskin cheklovsiz, umumiy mo‘tadil farq.
-        target = max(round(maintenance - 300), 1200 if gender == "Ayol" else 1500)
-    elif age < 18 and goal == "Vaznni kamaytirish":
-        target = None
+    if user.goal == "lose":
+        if user.age < 18:
+            target = None
+        else:
+            floor = 1500 if user.gender == "male" else 1200
+            target = max(round(maintenance - 700), floor)
+    elif user.goal == "habits":
+        target = max(round(maintenance - 300), 1300)
 
-    return BodyMetrics(
-        bmi=round(bmi, 1),
-        min_weight=round(min_weight, 1),
-        max_weight=round(max_weight, 1),
-        reference_weight=round(reference_weight, 1),
+    macro_kcal = target or maintenance
+    protein = round(min(max(user.current_weight_kg * 1.4, 80), 180))
+    fat = round(max(user.current_weight_kg * 0.7, 45))
+    carbs = max(round((macro_kcal - protein * 4 - fat * 9) / 4), 80)
+
+    return Metrics(
+        bmi=round(bmi, 2),
+        category_key=category_key(bmi),
+        normal_min=round(normal_min, 1),
+        normal_max=round(normal_max, 1),
+        ideal_weight=round(ideal, 1),
         maintenance_kcal=maintenance,
         target_kcal=target,
+        protein_g=protein,
+        fat_g=fat,
+        carbs_g=carbs,
     )
 
 
-def bmi_label(bmi: float) -> str:
-    if bmi < 18.5:
-        return "Kam vazn"
-    if bmi < 25.0:
-        return "Me’yoriy vazn"
-    if bmi < 30.0:
-        return "Ortiqcha vazn"
-    if bmi < 35.0:
-        return "1-darajali semizlik"
-    if bmi < 40.0:
-        return "2-darajali semizlik"
-    return "3-darajali semizlik"
+def plan_for(user, lang: str):
+    metrics = calculate(user)
+    return metrics, BMI_PLANS[metrics.category_key][lang]
 
 
-def bmi_guidance(bmi: float) -> str:
-    if bmi < 18.5:
-        return (
-            "Muvozanatli ovqatlanish va yetarli energiya olishga e’tibor bering. "
-            "Sababsiz vazn yo‘qotish bo‘lsa, mutaxassis bilan maslahatlashish muhim."
-        )
-    if bmi < 25.0:
-        return (
-            "Muntazam 3 mahal ovqatlanish, yetarli uyqu, suv va kundalik harakatni davom ettiring."
-        )
-    if bmi < 30.0:
-        return (
-            "Porsiyalarni nazorat qilish, shirin ichimliklarni kamaytirish va muntazam yurish foydali."
-        )
-    if bmi < 35.0:
-        return (
-            "Ovqatlanish va harakat rejasini bosqichma-bosqich yaxshilang. "
-            "Sog‘liq muammolari bo‘lsa, mutaxassis bilan maslahatlashish tavsiya etiladi."
-        )
-    if bmi < 40.0:
-        return (
-            "Past zarbli mashqlar va muvozanatli ovqatlanishni tanlang. "
-            "Shaxsiy reja uchun shifokor yoki dietolog bilan maslahatlashish ma’qul."
-        )
-    return (
-        "Sog‘liq xavflarini baholash va xavfsiz reja tuzish uchun shifokor nazorati muhim. "
-        "Keskin parhez yoki yuqori zo‘riqishli mashqlardan saqlaning."
-    )
+
+def capsule_schedule(capsules: int, lang: str) -> str:
+    if lang == "ru":
+        if capsules == 2:
+            return "🌅 1 капсула перед завтраком\n☀️ 1 капсула перед обедом"
+        return "🌅 1 капсула перед завтраком\n☀️ 1 капсула перед обедом\n🌙 1 капсула перед ужином"
+    if capsules == 2:
+        return "🌅 1 kapsula nonushtadan oldin\n☀️ 1 kapsula tushlikdan oldin"
+    return "🌅 1 kapsula nonushtadan oldin\n☀️ 1 kapsula tushlikdan oldin\n🌙 1 kapsula kechki ovqatdan oldin"
