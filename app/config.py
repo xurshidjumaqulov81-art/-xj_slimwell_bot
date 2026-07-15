@@ -1,5 +1,10 @@
 from functools import lru_cache
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+BASE_DIR = Path(__file__).resolve().parent
+ASSETS_DIR = BASE_DIR / "assets"
 
 
 class Settings(BaseSettings):
@@ -8,7 +13,6 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     database_url: str = "sqlite+aiosqlite:///./slimwell.db"
     admin_ids: str = ""
-    start_id: int = 12345
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -19,12 +23,10 @@ class Settings(BaseSettings):
 
     @property
     def admins(self) -> set[int]:
-        result: set[int] = set()
-        for item in self.admin_ids.split(","):
-            item = item.strip()
-            if item.isdigit():
-                result.add(int(item))
-        return result
+        return {
+            int(x.strip()) for x in self.admin_ids.split(",")
+            if x.strip().isdigit()
+        }
 
     @property
     def async_database_url(self) -> str:
@@ -39,4 +41,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-
