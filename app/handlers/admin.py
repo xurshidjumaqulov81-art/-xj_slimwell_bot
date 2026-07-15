@@ -1,77 +1,44 @@
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
-
 from app.config import get_settings
-from app.database.repository import admin_stats, search_user_by_slimwell_id
-from app.database.session import SessionFactory
-from app.keyboards.menus import admin_menu
-from app.services.health import calculate_metrics
-from app.states.forms import AdminSearch
-from app.utils.texts import card
+from app.database.crud import admin_stats, find_by_personal_id
+from app.database.db import SessionFactory
+from app.keyboards import inline
+from app.services.health import calculate
+from app.states import AdminSearch
+from app.utils.text import card
 
-router = Router()
-settings = get_settings()
-
-
-def is_admin(user_id: int) -> bool:
-    return user_id in settings.admins
+router=Router(); settings=get_settings()
 
 
-@router.message(F.text == "🛡 Admin panel")
-async def admin_root(message: Message):
-    if not is_admin(message.from_user.id):
-        return
-    await message.answer(card("🛡 ADMIN PANEL", "Foydalanuvchilar va statistika."), reply_markup=admin_menu())
+@router.message(F.text=="🛡 Admin panel")
+async def root(m:Message):
+    if m.from_user.id not in settings.admins:return
+    await m.answer(card("🛡 ADMIN PANEL","Foydalanuvchilarni kuzatish."),
+        reply_markup=inline([("📊 Statistika","admin:stats"),("🔍 ID qidirish","admin:search")]))
 
 
-@router.callback_query(F.data == "admin:stats")
-async def stats(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("Ruxsat yo‘q.", show_alert=True)
-        return
-    async with SessionFactory() as session:
-        data = await admin_stats(session)
-    await callback.message.edit_text(
-        card("📊 UMUMIY STATISTIKA", f"👥 Jami: <b>{data['total']}</b>\n🟢 Oxirgi 7 kun faol: <b>{data['active']}</b>"),
-        reply_markup=admin_menu(),
-    )
-    await callback.answer()
+@router.callback_query(F.data=="admin:stats")
+async def stats(c:CallbackQuery):
+    if c.from_user.id not in settings.admins:return
+    async with SessionFactory() as s:d=await admin_stats(s)
+    await c.message.answer(card("📊 STATISTIKA",f"👥 Jami: {d['total']}\n✅ Profil to‘liq: {d['completed']}"));await c.answer()
 
 
-@router.callback_query(F.data == "admin:search")
-async def search_start(callback: CallbackQuery, state: FSMContext):
-    if not is_admin(callback.from_user.id):
-        return
-    await state.set_state(AdminSearch.slimwell_id)
-    await callback.message.answer("7 xonali SlimWell ID ni kiriting:")
-    await callback.answer()
+@router.callback_query(F.data=="admin:search")
+async def search(c:CallbackQuery,state:FSMContext):
+    if c.from_user.id not in settings.admins:return
+    await state.set_state(AdminSearch.personal_id);await c.message.answer("7 xonali shaxsiy ID ni kiriting:");await c.answer()
 
 
-@router.message(AdminSearch.slimwell_id)
-async def search_result(message: Message, state: FSMContext):
-    if not is_admin(message.from_user.id):
-        return
-    sid = (message.text or "").strip()
-    async with SessionFactory() as session:
-        user = await search_user_by_slimwell_id(session, sid)
+@router.message(AdminSearch.personal_id)
+async def found(m:Message,state:FSMContext):
+    if m.from_user.id not in settings.admins:return
+    async with SessionFactory() as s:u=await find_by_personal_id(s,(m.text or "").strip())
     await state.clear()
-    if not user:
-        await message.answer(card("🔍 QIDIRUV", "Foydalanuvchi topilmadi."), reply_markup=admin_menu())
-        return
-    bmi = "—"
-    if all([user.age, user.gender, user.height_cm, user.current_weight_kg, user.goal]):
-        bmi = calculate_metrics(user.age, user.gender, user.height_cm, user.current_weight_kg, user.goal).bmi
-    body = (
-        f"🆔 ID: <b>{user.slimwell_id}</b>\n"
-        f"👤 Ism: <b>{user.name}</b>\n"
-        f"🎂 Yosh: <b>{user.age}</b>\n"
-        f"⚧ Jins: <b>{user.gender}</b>\n"
-        f"📏 Bo‘y: <b>{user.height_cm} sm</b>\n"
-        f"⚖️ Vazn: <b>{user.current_weight_kg} kg</b>\n"
-        f"📊 BMI: <b>{bmi}</b>\n"
-        f"🎯 Maqsad: <b>{user.goal}</b>\n"
-        f"🕒 Oxirgi faollik: <b>{user.last_active_at:%d.%m.%Y %H:%M}</b>"
-    )
-    await message.answer(card("👤 FOYDALANUVCHI KARTASI", body), reply_markup=admin_menu())
-
+    if not u:await m.answer("Topilmadi.");return
+    mm=calculate(u)
+    await m.answer(card("👤 FOYDALANUVCHI",
+        f"🆔 {u.personal_id}\n👤 {u.name}\n🎂 {u.age}\n📏 {u.height_cm:g} sm\n"
+        f"⚖️ {u.current_weight_kg:g} kg\n📊 BMI {mm.bmi:.2f}\n🕒 {u.last_active_at:%d.%m.%Y %H:%M}"))
