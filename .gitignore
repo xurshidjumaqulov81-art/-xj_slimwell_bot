@@ -1,41 +1,8 @@
-# Python
 __pycache__/
-*.py[cod]
-*$py.class
-
-# Virtual Environment
-venv/
-.venv/
-env/
-
-# Environment
+*.pyc
 .env
-.env.*
-
-# VS Code
+.venv/
+venv/
 .vscode/
-
-# PyCharm
 .idea/
-
-# macOS
 .DS_Store
-
-# Logs
-*.log
-
-# Database
-*.db
-*.sqlite3
-
-# Cache
-.pytest_cache/
-.mypy_cache/
-
-# Build
-build/
-dist/
-*.egg-info/
-
-# Temporary
-*.tmp
