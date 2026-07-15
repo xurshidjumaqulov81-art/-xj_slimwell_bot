@@ -1,8 +1,40 @@
-__pycache__/
-*.pyc
+# Maxfiy sozlamalar
 .env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
 .venv/
 venv/
+env/
+
+# Mahalliy database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# IDE
 .vscode/
 .idea/
+
+# macOS
 .DS_Store
+
+# Test va cache
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Build
+build/
+dist/
+*.egg-info/
