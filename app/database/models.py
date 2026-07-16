@@ -410,3 +410,4 @@ class ExerciseHistory(Base):
     user: Mapped["User"] = relationship(
         back_populates="exercises",
     )
+
