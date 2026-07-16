@@ -557,3 +557,4 @@ async def exercises_home(
     )
 
     await callback.answer()
+
