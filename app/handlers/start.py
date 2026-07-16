@@ -450,3 +450,4 @@ async def choose_activity(
     )
 
     await callback.answer()
+
