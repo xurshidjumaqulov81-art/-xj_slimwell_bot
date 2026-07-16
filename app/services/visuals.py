@@ -370,3 +370,4 @@ def create_bmi_card(
     )
 
     return output_path
+
