@@ -1,6 +1,10 @@
 from aiogram.fsm.state import State, StatesGroup
 
 
+# =====================================
+# REGISTRATION
+# =====================================
+
 class Registration(StatesGroup):
     language = State()
     name = State()
@@ -12,12 +16,20 @@ class Registration(StatesGroup):
     activity = State()
 
 
-class ProfileEdit(StatesGroup):
+# =====================================
+# PROFILE EDIT
+# =====================================
+
+class EditProfile(StatesGroup):
     name = State()
     age = State()
     height = State()
     weight = State()
 
+
+# =====================================
+# HABITS
+# =====================================
 
 class HabitInput(StatesGroup):
     water = State()
@@ -26,10 +38,18 @@ class HabitInput(StatesGroup):
     weight = State()
 
 
+# =====================================
+# FOOD
+# =====================================
+
 class FoodInput(StatesGroup):
     photo = State()
     description = State()
 
+
+# =====================================
+# ADMIN
+# =====================================
 
 class AdminState(StatesGroup):
     broadcast = State()
