@@ -5,7 +5,35 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BASE_DIR = Path(__file__).resolve().parent
+
 ASSETS_DIR = BASE_DIR / "assets"
+BMI_ASSETS_DIR = ASSETS_DIR / "bmi"
+BODY_ASSETS_DIR = ASSETS_DIR / "body"
+PRODUCT_ASSETS_DIR = ASSETS_DIR / "product"
+CERTIFICATES_ASSETS_DIR = ASSETS_DIR / "certificates"
+EXERCISES_ASSETS_DIR = ASSETS_DIR / "exercises"
+GENERATED_ASSETS_DIR = ASSETS_DIR / "generated"
+
+
+def ensure_asset_directories() -> None:
+    directories = [
+        ASSETS_DIR,
+        BMI_ASSETS_DIR,
+        BODY_ASSETS_DIR,
+        PRODUCT_ASSETS_DIR,
+        CERTIFICATES_ASSETS_DIR,
+        EXERCISES_ASSETS_DIR,
+        GENERATED_ASSETS_DIR,
+    ]
+
+    for directory in directories:
+        directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+
+ensure_asset_directories()
 
 
 class Settings(BaseSettings):
@@ -14,7 +42,9 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
 
-    database_url: str = "sqlite+aiosqlite:///./slimwell.db"
+    database_url: str = (
+        "sqlite+aiosqlite:///./slimwell.db"
+    )
 
     admin_ids: str = ""
 
@@ -33,7 +63,9 @@ class Settings(BaseSettings):
             value = value.strip()
 
             if value.isdigit():
-                result.add(int(value))
+                result.add(
+                    int(value)
+                )
 
         return result
 
