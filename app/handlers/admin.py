@@ -244,3 +244,4 @@ async def search_user_by_id(
     )
 
     await state.clear()
+
