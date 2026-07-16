@@ -219,3 +219,4 @@ async def get_today_summary(
         "exercise_minutes": await get_today_exercise_minutes(session, user_id),
         "food_calories": await get_today_food_calories(session, user_id),
     }
+
