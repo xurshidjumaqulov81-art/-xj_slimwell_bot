@@ -22,6 +22,10 @@ class Base(DeclarativeBase):
     pass
 
 
+# =========================================================
+# FOYDALANUVCHI
+# =========================================================
+
 class User(Base):
     __tablename__ = "users"
 
@@ -35,6 +39,7 @@ class User(Base):
         BigInteger,
         unique=True,
         index=True,
+        nullable=False,
     )
 
     personal_id: Mapped[str | None] = mapped_column(
@@ -52,6 +57,7 @@ class User(Base):
     language: Mapped[str] = mapped_column(
         String(2),
         default="uz",
+        nullable=False,
     )
 
     name: Mapped[str | None] = mapped_column(
@@ -92,21 +98,25 @@ class User(Base):
     accepted_terms: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
+        nullable=False,
     )
 
     is_blocked: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
+        nullable=False,
     )
 
     registered_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
+        nullable=False,
     )
 
     last_active_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
+        nullable=False,
     )
 
     weights: Mapped[list["WeightHistory"]] = relationship(
@@ -119,6 +129,30 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
+    waters: Mapped[list["WaterHistory"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    steps: Mapped[list["StepHistory"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    sleeps: Mapped[list["SleepHistory"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    exercises: Mapped[list["ExerciseHistory"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+
+# =========================================================
+# VAZN TARIXI
+# =========================================================
 
 class WeightHistory(Base):
     __tablename__ = "weight_history"
@@ -135,21 +169,28 @@ class WeightHistory(Base):
             ondelete="CASCADE",
         ),
         index=True,
+        nullable=False,
     )
 
     weight_kg: Mapped[float] = mapped_column(
         Float,
+        nullable=False,
     )
 
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
+        nullable=False,
     )
 
-    user: Mapped[User] = relationship(
+    user: Mapped["User"] = relationship(
         back_populates="weights",
     )
 
+
+# =========================================================
+# OVQAT TARIXI
+# =========================================================
 
 class FoodHistory(Base):
     __tablename__ = "food_history"
@@ -166,30 +207,36 @@ class FoodHistory(Base):
             ondelete="CASCADE",
         ),
         index=True,
+        nullable=False,
     )
 
     title: Mapped[str] = mapped_column(
         String(200),
+        nullable=False,
     )
 
     calories: Mapped[float] = mapped_column(
         Float,
         default=0,
+        nullable=False,
     )
 
     protein_g: Mapped[float] = mapped_column(
         Float,
         default=0,
+        nullable=False,
     )
 
     fat_g: Mapped[float] = mapped_column(
         Float,
         default=0,
+        nullable=False,
     )
 
     carbs_g: Mapped[float] = mapped_column(
         Float,
         default=0,
+        nullable=False,
     )
 
     details: Mapped[str | None] = mapped_column(
@@ -200,12 +247,17 @@ class FoodHistory(Base):
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
+        nullable=False,
     )
 
-    user: Mapped[User] = relationship(
+    user: Mapped["User"] = relationship(
         back_populates="foods",
     )
 
+
+# =========================================================
+# SUV TARIXI
+# =========================================================
 
 class WaterHistory(Base):
     __tablename__ = "water_history"
@@ -222,17 +274,28 @@ class WaterHistory(Base):
             ondelete="CASCADE",
         ),
         index=True,
+        nullable=False,
     )
 
     amount_ml: Mapped[int] = mapped_column(
         Integer,
+        nullable=False,
     )
 
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
+        nullable=False,
     )
 
+    user: Mapped["User"] = relationship(
+        back_populates="waters",
+    )
+
+
+# =========================================================
+# QADAMLAR TARIXI
+# =========================================================
 
 class StepHistory(Base):
     __tablename__ = "step_history"
@@ -249,17 +312,28 @@ class StepHistory(Base):
             ondelete="CASCADE",
         ),
         index=True,
+        nullable=False,
     )
 
     steps: Mapped[int] = mapped_column(
         Integer,
+        nullable=False,
     )
 
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
+        nullable=False,
     )
 
+    user: Mapped["User"] = relationship(
+        back_populates="steps",
+    )
+
+
+# =========================================================
+# UYQU TARIXI
+# =========================================================
 
 class SleepHistory(Base):
     __tablename__ = "sleep_history"
@@ -276,17 +350,28 @@ class SleepHistory(Base):
             ondelete="CASCADE",
         ),
         index=True,
+        nullable=False,
     )
 
     hours: Mapped[float] = mapped_column(
         Float,
+        nullable=False,
     )
 
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
+        nullable=False,
     )
 
+    user: Mapped["User"] = relationship(
+        back_populates="sleeps",
+    )
+
+
+# =========================================================
+# MASHQLAR TARIXI
+# =========================================================
 
 class ExerciseHistory(Base):
     __tablename__ = "exercise_history"
@@ -303,17 +388,25 @@ class ExerciseHistory(Base):
             ondelete="CASCADE",
         ),
         index=True,
+        nullable=False,
     )
 
     title: Mapped[str] = mapped_column(
         String(150),
+        nullable=False,
     )
 
     minutes: Mapped[int] = mapped_column(
         Integer,
+        nullable=False,
     )
 
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
+        nullable=False,
+    )
+
+    user: Mapped["User"] = relationship(
+        back_populates="exercises",
     )
