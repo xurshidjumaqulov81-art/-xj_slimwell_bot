@@ -36,3 +36,4 @@ Token va kalitlarni GitHub kodiga yozmang.
 SlimWell qabul rejasi `app/content.py` ichida. Hozir u katalogdan olingan
 2 yoki 3 kapsulalik reja bilan cheklangan va yorliqdagi 3 kapsuladan oshmaydi.
 Mahsulotning tasdiqlangan yo‘riqnomasi o‘zgarsa, shu fayl yangilanadi.
+
