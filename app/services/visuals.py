@@ -13,79 +13,70 @@ from app.config import ASSETS_DIR
 OUTPUT_DIR: Final[Path] = ASSETS_DIR / "generated"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-CARD_WIDTH: Final[int] = 1600
-CARD_HEIGHT: Final[int] = 1067
+WIDTH: Final[int] = 1600
+HEIGHT: Final[int] = 1000
 
-GREEN: Final[tuple[int, int, int]] = (26, 128, 38)
-DARK_GREEN: Final[tuple[int, int, int]] = (13, 106, 25)
-LIGHT_GREEN: Final[tuple[int, int, int]] = (239, 249, 239)
-BORDER_GREEN: Final[tuple[int, int, int]] = (31, 137, 55)
-BLACK: Final[tuple[int, int, int]] = (25, 25, 25)
-WHITE: Final[tuple[int, int, int]] = (255, 255, 255)
+WHITE = (255, 255, 255)
+BLACK = (24, 24, 24)
+GREEN = (18, 127, 33)
+DARK_GREEN = (10, 98, 24)
+LIGHT_GREEN = (236, 247, 235)
+BORDER_GREEN = (31, 137, 55)
 
 
-def _font_candidates(bold: bool) -> list[Path]:
-    filenames = (
-        [
-            "DejaVuSans-Bold.ttf",
-            "LiberationSans-Bold.ttf",
-            "Arial Bold.ttf",
-            "Arial-Bold.ttf",
-        ]
+def _find_font(bold: bool) -> Path | None:
+    names = (
+        ("DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf")
         if bold
-        else [
-            "DejaVuSans.ttf",
-            "LiberationSans-Regular.ttf",
-            "Arial.ttf",
-        ]
+        else ("DejaVuSans.ttf", "LiberationSans-Regular.ttf")
     )
 
-    roots = [
+    roots = (
         Path("/usr/share/fonts"),
         Path("/usr/local/share/fonts"),
-        Path("/usr/local/lib"),
-        Path("/opt"),
-    ]
-
-    candidates: list[Path] = []
+        Path("/usr/local/lib/python3.12/site-packages/PIL"),
+        Path("/usr/local/lib/python3.11/site-packages/PIL"),
+    )
 
     for root in roots:
         if not root.exists():
             continue
 
-        for filename in filenames:
+        for name in names:
             try:
-                candidates.extend(root.rglob(filename))
+                matches = list(root.rglob(name))
             except OSError:
-                continue
+                matches = []
 
-    return candidates
+            if matches:
+                return matches[0]
+
+    return None
 
 
-def _load_font(
+_FONT_REGULAR = _find_font(False)
+_FONT_BOLD = _find_font(True)
+
+
+def _font(
     size: int,
     bold: bool = False,
 ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    for path in _font_candidates(bold):
+    selected = _FONT_BOLD if bold else _FONT_REGULAR
+
+    if selected is not None:
+        return ImageFont.truetype(
+            str(selected),
+            size=size,
+        )
+
+    for fallback in (
+        "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf",
+        "Arial.ttf",
+    ):
         try:
             return ImageFont.truetype(
-                str(path),
-                size=size,
-            )
-        except OSError:
-            continue
-
-    # Ko‘p Linux serverlarda bu nom Pillow orqali topiladi.
-    fallback_names = (
-        ["DejaVuSans-Bold.ttf", "Arial.ttf"]
-        if bold
-        else ["DejaVuSans.ttf", "Arial.ttf"]
-    )
-
-    for name in fallback_names:
-        try:
-            return ImageFont.truetype(
-                name,
+                fallback,
                 size=size,
             )
         except OSError:
@@ -94,7 +85,7 @@ def _load_font(
     return ImageFont.load_default()
 
 
-def _text_size(
+def _text_box(
     draw: ImageDraw.ImageDraw,
     text: str,
     font: ImageFont.ImageFont,
@@ -125,7 +116,7 @@ def _center_text(
     stroke_width: int = 0,
     stroke_fill: tuple[int, int, int] | None = None,
 ) -> None:
-    width, height = _text_size(
+    w, h = _text_box(
         draw,
         text,
         font,
@@ -134,8 +125,8 @@ def _center_text(
 
     draw.multiline_text(
         (
-            int(x - width / 2),
-            int(y - height / 2),
+            int(x - w / 2),
+            int(y - h / 2),
         ),
         text,
         font=font,
@@ -148,10 +139,10 @@ def _center_text(
 
 
 def _category_title(
-    category_key: str,
+    key: str,
     language: str,
 ) -> str:
-    values = {
+    data = {
         "uz": {
             "underweight": "KAM VAZN",
             "normal": "ME’YORIY VAZN",
@@ -170,28 +161,28 @@ def _category_title(
         },
     }
 
-    return values.get(
+    return data.get(
         language,
-        values["uz"],
+        data["uz"],
     ).get(
-        category_key,
-        category_key.upper(),
+        key,
+        key.upper(),
     )
 
 
-def _category_badge_color(
-    category_key: str,
+def _badge_color(
+    key: str,
 ) -> tuple[int, int, int]:
     return {
         "underweight": (32, 137, 229),
         "normal": (68, 181, 46),
-        "overweight": (241, 171, 0),
-        "obesity_1": (240, 87, 20),
-        "obesity_2": (221, 48, 28),
-        "obesity_3": (183, 0, 0),
+        "overweight": (235, 169, 0),
+        "obesity_1": (241, 90, 18),
+        "obesity_2": (218, 49, 30),
+        "obesity_3": (184, 0, 0),
     }.get(
-        category_key,
-        (35, 130, 55),
+        key,
+        GREEN,
     )
 
 
@@ -200,37 +191,34 @@ def _bmi_to_angle(
 ) -> float:
     minimum = 14.0
     maximum = 45.0
-
     value = min(
         max(bmi, minimum),
         maximum,
     )
-
     ratio = (
         value - minimum
     ) / (
         maximum - minimum
     )
 
-    # PIL burchagi: 180° chap, 270° tepa, 360° o‘ng.
     return 180.0 + ratio * 180.0
 
 
-def _point_on_circle(
-    center_x: float,
-    center_y: float,
+def _point(
+    cx: float,
+    cy: float,
     radius: float,
     angle_deg: float,
 ) -> tuple[float, float]:
     angle = math.radians(angle_deg)
 
     return (
-        center_x + math.cos(angle) * radius,
-        center_y + math.sin(angle) * radius,
+        cx + math.cos(angle) * radius,
+        cy + math.sin(angle) * radius,
     )
 
 
-def _draw_ring_segment(
+def _ring_segment(
     image: Image.Image,
     center: tuple[int, int],
     outer_radius: int,
@@ -239,75 +227,43 @@ def _draw_ring_segment(
     end_angle: float,
     color: tuple[int, int, int],
 ) -> None:
-    layer = Image.new(
+    overlay = Image.new(
         "RGBA",
         image.size,
         (0, 0, 0, 0),
     )
-    layer_draw = ImageDraw.Draw(layer)
+    draw = ImageDraw.Draw(overlay)
 
     cx, cy = center
 
-    outer_box = (
-        cx - outer_radius,
-        cy - outer_radius,
-        cx + outer_radius,
-        cy + outer_radius,
-    )
-    inner_box = (
-        cx - inner_radius,
-        cy - inner_radius,
-        cx + inner_radius,
-        cy + inner_radius,
-    )
-
-    layer_draw.pieslice(
-        outer_box,
+    draw.pieslice(
+        (
+            cx - outer_radius,
+            cy - outer_radius,
+            cx + outer_radius,
+            cy + outer_radius,
+        ),
         start=start_angle,
         end=end_angle,
         fill=(*color, 255),
     )
-    layer_draw.pieslice(
-        inner_box,
+
+    draw.pieslice(
+        (
+            cx - inner_radius,
+            cy - inner_radius,
+            cx + inner_radius,
+            cy + inner_radius,
+        ),
         start=start_angle - 1,
         end=end_angle + 1,
         fill=(255, 255, 255, 255),
     )
 
-    image.alpha_composite(layer)
+    image.alpha_composite(overlay)
 
 
-def _draw_leaf(
-    draw: ImageDraw.ImageDraw,
-    x: int,
-    y: int,
-    flip: bool = False,
-) -> None:
-    direction = -1 if flip else 1
-
-    draw.ellipse(
-        (
-            x - 22,
-            y - 12,
-            x + 20,
-            y + 18,
-        ),
-        fill=(55, 164, 45),
-    )
-
-    draw.line(
-        (
-            x - 20 * direction,
-            y + 18,
-            x + 24 * direction,
-            y - 18,
-        ),
-        fill=(25, 115, 35),
-        width=5,
-    )
-
-
-def _draw_needle(
+def _needle(
     draw: ImageDraw.ImageDraw,
     center: tuple[int, int],
     angle_deg: float,
@@ -315,186 +271,161 @@ def _draw_needle(
 ) -> None:
     cx, cy = center
     angle = math.radians(angle_deg)
-
-    tip_x = cx + math.cos(angle) * length
-    tip_y = cy + math.sin(angle) * length
-
     perpendicular = angle + math.pi / 2
-    base_half = 16
+
+    tip = (
+        cx + math.cos(angle) * length,
+        cy + math.sin(angle) * length,
+    )
+    shoulder_distance = length - 55
+    shoulder = (
+        cx + math.cos(angle) * shoulder_distance,
+        cy + math.sin(angle) * shoulder_distance,
+    )
+
+    base_half = 18
     shoulder_half = 9
 
-    base_left = (
-        cx + math.cos(perpendicular) * base_half,
-        cy + math.sin(perpendicular) * base_half,
-    )
-    base_right = (
-        cx - math.cos(perpendicular) * base_half,
-        cy - math.sin(perpendicular) * base_half,
-    )
-
-    shoulder_distance = length - 55
-    shoulder_x = cx + math.cos(angle) * shoulder_distance
-    shoulder_y = cy + math.sin(angle) * shoulder_distance
-
-    shoulder_left = (
-        shoulder_x + math.cos(perpendicular) * shoulder_half,
-        shoulder_y + math.sin(perpendicular) * shoulder_half,
-    )
-    shoulder_right = (
-        shoulder_x - math.cos(perpendicular) * shoulder_half,
-        shoulder_y - math.sin(perpendicular) * shoulder_half,
-    )
+    points = [
+        (
+            cx + math.cos(perpendicular) * base_half,
+            cy + math.sin(perpendicular) * base_half,
+        ),
+        (
+            shoulder[0] + math.cos(perpendicular) * shoulder_half,
+            shoulder[1] + math.sin(perpendicular) * shoulder_half,
+        ),
+        tip,
+        (
+            shoulder[0] - math.cos(perpendicular) * shoulder_half,
+            shoulder[1] - math.sin(perpendicular) * shoulder_half,
+        ),
+        (
+            cx - math.cos(perpendicular) * base_half,
+            cy - math.sin(perpendicular) * base_half,
+        ),
+    ]
 
     draw.polygon(
-        [
-            (int(base_left[0]), int(base_left[1])),
-            (int(shoulder_left[0]), int(shoulder_left[1])),
-            (int(tip_x), int(tip_y)),
-            (int(shoulder_right[0]), int(shoulder_right[1])),
-            (int(base_right[0]), int(base_right[1])),
-        ],
+        [(int(x), int(y)) for x, y in points],
         fill=(22, 22, 22),
     )
 
     draw.ellipse(
         (
-            cx - 30,
-            cy - 30,
-            cx + 30,
-            cy + 30,
+            cx - 34,
+            cy - 34,
+            cx + 34,
+            cy + 34,
         ),
-        fill=(20, 20, 20),
-        outline=(55, 55, 55),
+        fill=(25, 25, 25),
+        outline=(70, 70, 70),
         width=6,
     )
     draw.ellipse(
         (
-            cx - 17,
-            cy - 17,
-            cx + 17,
-            cy + 17,
+            cx - 19,
+            cy - 19,
+            cx + 19,
+            cy + 19,
         ),
-        fill=(65, 65, 65),
+        fill=(85, 85, 85),
     )
 
 
-def _draw_metric_icon(
+def _metric_icon(
     draw: ImageDraw.ImageDraw,
-    center_x: int,
-    center_y: int,
-    kind: str,
+    x: int,
+    y: int,
+    code: str,
     color: tuple[int, int, int],
 ) -> None:
+    pale = (
+        min(color[0] + 205, 255),
+        min(color[1] + 205, 255),
+        min(color[2] + 205, 255),
+    )
+
     draw.rounded_rectangle(
         (
-            center_x - 36,
-            center_y - 36,
-            center_x + 36,
-            center_y + 36,
+            x - 34,
+            y - 34,
+            x + 34,
+            y + 34,
         ),
-        radius=18,
-        fill=(
-            min(color[0] + 205, 255),
-            min(color[1] + 205, 255),
-            min(color[2] + 205, 255),
-        ),
+        radius=17,
+        fill=pale,
     )
 
-    icon_font = _load_font(
-        45,
+    icon_font = _font(
+        27 if len(code) > 1 else 40,
         bold=True,
-    )
-
-    symbols = {
-        "weight": "⚖",
-        "height": "↕",
-        "bmi": "BMI",
-        "ideal": "◎",
-        "range": "⚖",
-        "remaining": "🔥",
-    }
-
-    symbol = symbols.get(
-        kind,
-        "•",
-    )
-
-    symbol_font = (
-        _load_font(24, bold=True)
-        if kind == "bmi"
-        else icon_font
     )
 
     _center_text(
         draw,
-        center_x,
-        center_y,
-        symbol,
-        symbol_font,
+        x,
+        y,
+        code,
+        icon_font,
         color,
     )
 
 
-def _draw_metric_card(
+def _metric_card(
     draw: ImageDraw.ImageDraw,
     box: tuple[int, int, int, int],
     title: str,
     value: str,
-    value_color: tuple[int, int, int],
-    icon_kind: str,
+    color: tuple[int, int, int],
+    icon_code: str,
 ) -> None:
     left, top, right, bottom = box
+    center_x = (left + right) // 2
 
     draw.rounded_rectangle(
         box,
-        radius=22,
-        fill=(255, 255, 255),
-        outline=(218, 235, 218),
+        radius=20,
+        fill=WHITE,
+        outline=(215, 232, 215),
         width=3,
     )
 
-    center_x = (left + right) // 2
-
-    _draw_metric_icon(
+    _metric_icon(
         draw,
         center_x,
-        top + 55,
-        icon_kind,
-        value_color,
+        top + 45,
+        icon_code,
+        color,
     )
 
-    title_font = _load_font(
-        21,
+    title_font = _font(
+        24,
         bold=True,
     )
-    value_font = _load_font(
-        31,
+    value_font = _font(
+        38,
         bold=True,
     )
 
     _center_text(
         draw,
         center_x,
-        top + 123,
+        top + 110,
         title,
         title_font,
-        (25, 25, 25),
+        BLACK,
+        spacing=2,
     )
     _center_text(
         draw,
         center_x,
-        top + 165,
+        top + 156,
         value,
         value_font,
-        value_color,
+        color,
+        spacing=2,
     )
-
-
-def _format_number(
-    value: float,
-    digits: int = 1,
-) -> str:
-    return f"{value:.{digits}f}"
 
 
 def create_bmi_card(
@@ -508,42 +439,37 @@ def create_bmi_card(
     current_weight: float | None = None,
     height_cm: float | None = None,
 ) -> Path:
-    """
-    Premium BMI kartasini yaratadi.
-
-    `current_weight` va `height_cm` eski body.py bilan moslik uchun
-    ixtiyoriy. Berilmasa, mavjud metrikalardan taxmin qilinadi.
-    """
-
-    selected_language = (
+    language = (
         language
         if language in {"uz", "ru"}
         else "uz"
     )
 
     if height_cm is None:
-        # health.py ideal vaznni BMI 22 bo‘yicha hisoblaydi.
         height_cm = (
             math.sqrt(
-                max(ideal_weight, 1) / 22.0
+                max(
+                    ideal_weight,
+                    1,
+                )
+                / 22.0
             )
             * 100.0
         )
 
     if current_weight is None:
-        if remaining_weight > 0:
-            current_weight = (
-                normal_max_weight
-                + remaining_weight
-            )
-        else:
-            current_weight = ideal_weight
+        current_weight = (
+            normal_max_weight
+            + remaining_weight
+            if remaining_weight > 0
+            else ideal_weight
+        )
 
     image = Image.new(
         "RGBA",
         (
-            CARD_WIDTH,
-            CARD_HEIGHT,
+            WIDTH,
+            HEIGHT,
         ),
         (248, 251, 248, 255),
     )
@@ -553,140 +479,123 @@ def create_bmi_card(
         (
             8,
             8,
-            CARD_WIDTH - 8,
-            CARD_HEIGHT - 8,
+            WIDTH - 8,
+            HEIGHT - 8,
         ),
-        radius=45,
-        fill=(255, 255, 255),
+        radius=42,
+        fill=WHITE,
         outline=BORDER_GREEN,
         width=6,
     )
 
-    title_font = _load_font(
-        72,
-        bold=True,
-    )
-
     title = (
         "BMI TAHLILI"
-        if selected_language == "uz"
+        if language == "uz"
         else "АНАЛИЗ BMI"
     )
 
     _center_text(
         draw,
-        CARD_WIDTH / 2,
-        60,
+        WIDTH / 2,
+        55,
         title,
-        title_font,
+        _font(74, bold=True),
         DARK_GREEN,
-    )
-    _draw_leaf(
-        draw,
-        525,
-        58,
-        flip=True,
-    )
-    _draw_leaf(
-        draw,
-        1075,
-        58,
-        flip=False,
     )
 
     center = (
-        CARD_WIDTH // 2,
-        585,
+        WIDTH // 2,
+        575,
     )
-    outer_radius = 545
-    inner_radius = 355
+    outer_radius = 535
+    inner_radius = 350
 
     zones = [
-        {
-            "key": "underweight",
-            "start": 14.0,
-            "end": 18.5,
-            "color": (32, 137, 229),
-            "uz": "KAM VAZN\n< 18.5",
-            "ru": "НЕДОСТАТОЧНЫЙ\nВЕС\n< 18.5",
-            "text_color": WHITE,
-        },
-        {
-            "key": "normal",
-            "start": 18.5,
-            "end": 25.0,
-            "color": (67, 181, 46),
-            "uz": "ME’YORIY VAZN\n18.5 – 24.9",
-            "ru": "НОРМАЛЬНЫЙ ВЕС\n18.5 – 24.9",
-            "text_color": WHITE,
-        },
-        {
-            "key": "overweight",
-            "start": 25.0,
-            "end": 30.0,
-            "color": (255, 211, 0),
-            "uz": "ORTIQCHA VAZN\n25 – 29.9",
-            "ru": "ИЗБЫТОЧНЫЙ ВЕС\n25 – 29.9",
-            "text_color": BLACK,
-        },
-        {
-            "key": "obesity_1",
-            "start": 30.0,
-            "end": 35.0,
-            "color": (255, 137, 0),
-            "uz": "1-DARAJALI\nSEMIZLIK\n30 – 34.9",
-            "ru": "ОЖИРЕНИЕ\n1 СТЕПЕНИ\n30 – 34.9",
-            "text_color": WHITE,
-        },
-        {
-            "key": "obesity_2",
-            "start": 35.0,
-            "end": 40.0,
-            "color": (239, 55, 23),
-            "uz": "2-DARAJALI\nSEMIZLIK\n35 – 39.9",
-            "ru": "ОЖИРЕНИЕ\n2 СТЕПЕНИ\n35 – 39.9",
-            "text_color": WHITE,
-        },
-        {
-            "key": "obesity_3",
-            "start": 40.0,
-            "end": 45.0,
-            "color": (192, 0, 0),
-            "uz": "3-DARAJALI\nSEMIZLIK\n≥ 40",
-            "ru": "ОЖИРЕНИЕ\n3 СТЕПЕНИ\n≥ 40",
-            "text_color": WHITE,
-        },
+        (
+            "underweight",
+            14.0,
+            18.5,
+            (32, 137, 229),
+            "KAM VAZN\n< 18.5",
+            "НЕДОСТАТОЧНЫЙ\nВЕС\n< 18.5",
+            WHITE,
+        ),
+        (
+            "normal",
+            18.5,
+            25.0,
+            (67, 181, 46),
+            "ME’YORIY VAZN\n18.5 – 24.9",
+            "НОРМАЛЬНЫЙ ВЕС\n18.5 – 24.9",
+            WHITE,
+        ),
+        (
+            "overweight",
+            25.0,
+            30.0,
+            (255, 211, 0),
+            "ORTIQCHA VAZN\n25 – 29.9",
+            "ИЗБЫТОЧНЫЙ ВЕС\n25 – 29.9",
+            BLACK,
+        ),
+        (
+            "obesity_1",
+            30.0,
+            35.0,
+            (255, 137, 0),
+            "1-DARAJALI\nSEMIZLIK\n30 – 34.9",
+            "ОЖИРЕНИЕ\n1 СТЕПЕНИ\n30 – 34.9",
+            WHITE,
+        ),
+        (
+            "obesity_2",
+            35.0,
+            40.0,
+            (239, 55, 23),
+            "2-DARAJALI\nSEMIZLIK\n35 – 39.9",
+            "ОЖИРЕНИЕ\n2 СТЕПЕНИ\n35 – 39.9",
+            WHITE,
+        ),
+        (
+            "obesity_3",
+            40.0,
+            45.0,
+            (192, 0, 0),
+            "3-DARAJALI\nSEMIZLIK\n≥ 40",
+            "ОЖИРЕНИЕ\n3 СТЕПЕНИ\n≥ 40",
+            WHITE,
+        ),
     ]
 
-    for zone in zones:
-        _draw_ring_segment(
+    for _, start, end, color, *_ in zones:
+        _ring_segment(
             image,
             center,
             outer_radius,
             inner_radius,
-            _bmi_to_angle(zone["start"]),
-            _bmi_to_angle(zone["end"]),
-            zone["color"],
+            _bmi_to_angle(start),
+            _bmi_to_angle(end),
+            color,
         )
 
     draw = ImageDraw.Draw(image)
 
-    # Segment chegaralari.
-    for boundary in [
+    for boundary in (
         18.5,
         25.0,
         30.0,
         35.0,
         40.0,
-    ]:
+    ):
         angle = _bmi_to_angle(boundary)
-        inner_point = _point_on_circle(
+
+        p1 = _point(
             center[0],
             center[1],
             inner_radius - 2,
             angle,
         )
-        outer_point = _point_on_circle(
+        p2 = _point(
             center[0],
             center[1],
             outer_radius + 2,
@@ -695,89 +604,72 @@ def create_bmi_card(
 
         draw.line(
             (
-                int(inner_point[0]),
-                int(inner_point[1]),
-                int(outer_point[0]),
-                int(outer_point[1]),
+                int(p1[0]),
+                int(p1[1]),
+                int(p2[0]),
+                int(p2[1]),
             ),
             fill=WHITE,
             width=5,
         )
 
-    # Segment ichidagi matnlar.
-    segment_font = _load_font(
-        28,
-        bold=True,
-    )
-    segment_font_small = _load_font(
-        25,
-        bold=True,
-    )
+    segment_fonts = {
+        "underweight": _font(34, bold=True),
+        "normal": _font(34, bold=True),
+        "overweight": _font(34, bold=True),
+        "obesity_1": _font(31, bold=True),
+        "obesity_2": _font(31, bold=True),
+        "obesity_3": _font(31, bold=True),
+    }
 
-    for zone in zones:
-        middle_bmi = (
-            zone["start"]
-            + zone["end"]
-        ) / 2
-        middle_angle = _bmi_to_angle(
-            middle_bmi
-        )
-        text_radius = (
-            inner_radius
-            + (
-                outer_radius
-                - inner_radius
+    for key, start, end, _, uz_text, ru_text, text_color in zones:
+        angle = _bmi_to_angle(
+            (
+                start + end
             )
-            * 0.55
+            / 2
         )
-
-        text_x, text_y = _point_on_circle(
+        x, y = _point(
             center[0],
             center[1],
-            text_radius,
-            middle_angle,
-        )
-
-        font = (
-            segment_font_small
-            if zone["key"] in {
-                "obesity_1",
-                "obesity_2",
-                "obesity_3",
-            }
-            else segment_font
+            440,
+            angle,
         )
 
         _center_text(
             draw,
-            text_x,
-            text_y,
-            zone[selected_language],
-            font,
-            zone["text_color"],
-            spacing=5,
+            x,
+            y,
+            (
+                uz_text
+                if language == "uz"
+                else ru_text
+            ),
+            segment_fonts[key],
+            text_color,
+            spacing=4,
+            stroke_width=0,
         )
 
-    # Chegara raqamlari.
-    boundary_font = _load_font(
-        43,
+    boundary_font = _font(
+        49,
         bold=True,
     )
 
-    for boundary in [
+    for boundary in (
         18.5,
         25,
         30,
         35,
         40,
-    ]:
+    ):
         angle = _bmi_to_angle(
             float(boundary)
         )
-        x, y = _point_on_circle(
+        x, y = _point(
             center[0],
             center[1],
-            outer_radius + 48,
+            outer_radius + 45,
             angle,
         )
 
@@ -790,45 +682,43 @@ def create_bmi_card(
             BLACK,
         )
 
-    # Ichki shkala chiziqlari.
     for index in range(25):
-        ratio = index / 24
-        angle = 180 + ratio * 180
-
-        major = (
-            index % 4 == 0
+        angle = (
+            180
+            + index
+            / 24
+            * 180
         )
-        outer_tick = inner_radius - 12
-        inner_tick = (
-            inner_radius - 42
-            if major
-            else inner_radius - 28
-        )
+        major = index % 4 == 0
 
-        start = _point_on_circle(
+        p1 = _point(
             center[0],
             center[1],
-            inner_tick,
+            inner_radius - (
+                44
+                if major
+                else 29
+            ),
             angle,
         )
-        end = _point_on_circle(
+        p2 = _point(
             center[0],
             center[1],
-            outer_tick,
+            inner_radius - 10,
             angle,
         )
 
         draw.line(
             (
-                int(start[0]),
-                int(start[1]),
-                int(end[0]),
-                int(end[1]),
+                int(p1[0]),
+                int(p1[1]),
+                int(p2[0]),
+                int(p2[1]),
             ),
             fill=(
-                (25, 25, 25)
+                BLACK
                 if major
-                else (150, 150, 150)
+                else (145, 145, 145)
             ),
             width=(
                 5
@@ -837,257 +727,191 @@ def create_bmi_card(
             ),
         )
 
-    _draw_needle(
+    _needle(
         draw,
         center,
         _bmi_to_angle(bmi),
-        325,
-    )
-
-    # Markaziy BMI.
-    bmi_label_font = _load_font(
-        34,
-        bold=True,
-    )
-    bmi_value_font = _load_font(
-        96,
-        bold=True,
-    )
-    badge_font = _load_font(
-        27,
-        bold=True,
+        320,
     )
 
     _center_text(
         draw,
         center[0],
-        625,
+        615,
         "BMI",
-        bmi_label_font,
+        _font(36, bold=True),
         BLACK,
     )
     _center_text(
         draw,
         center[0],
-        685,
+        680,
         f"{bmi:.2f}",
-        bmi_value_font,
+        _font(112, bold=True),
         GREEN,
     )
 
     badge_text = _category_title(
         category_key,
-        selected_language,
+        language,
     )
-    badge_color = _category_badge_color(
-        category_key
+    badge_font = _font(
+        31,
+        bold=True,
     )
-
     badge_width = max(
-        360,
-        _text_size(
+        390,
+        _text_box(
             draw,
             badge_text,
             badge_font,
-        )[0] + 70,
-    )
-    badge_left = int(
-        center[0] - badge_width / 2
-    )
-    badge_right = int(
-        center[0] + badge_width / 2
+        )[0] + 80,
     )
 
     draw.rounded_rectangle(
         (
-            badge_left,
-            735,
-            badge_right,
-            785,
+            int(center[0] - badge_width / 2),
+            738,
+            int(center[0] + badge_width / 2),
+            794,
         ),
-        radius=25,
-        fill=badge_color,
+        radius=28,
+        fill=_badge_color(
+            category_key
+        ),
     )
     _center_text(
         draw,
         center[0],
-        760,
+        766,
         badge_text,
         badge_font,
         WHITE,
     )
 
-    # Pastdagi 6 ta ko‘rsatkich kartasi.
-    if selected_language == "ru":
-        titles = [
-            "Ваш вес",
-            "Ваш рост",
-            "Показатель BMI",
-            "Идеальный вес",
-            "Нормальный диапазон",
-            "Нужно снизить",
-        ]
-        unit_kg = "кг"
-        unit_cm = "см"
-    else:
-        titles = [
+    if language == "uz":
+        titles = (
             "Sizning vazningiz",
             "Sizning bo‘yingiz",
             "BMI ko‘rsatkichi",
             "Ideal vazn",
             "Normal vazn oralig‘i",
             "Yo‘qotish kerak",
-        ]
-        unit_kg = "kg"
-        unit_cm = "cm"
+        )
+        kg = "kg"
+        cm = "cm"
+    else:
+        titles = (
+            "Ваш вес",
+            "Ваш рост",
+            "Показатель BMI",
+            "Идеальный вес",
+            "Нормальный диапазон",
+            "Нужно снизить",
+        )
+        kg = "кг"
+        cm = "см"
 
-    values = [
-        f"{_format_number(current_weight)} {unit_kg}",
-        f"{_format_number(height_cm)} {unit_cm}",
+    values = (
+        f"{current_weight:.1f} {kg}",
+        f"{height_cm:.1f} {cm}",
         f"{bmi:.2f}",
-        f"{_format_number(ideal_weight)} {unit_kg}",
+        f"{ideal_weight:.1f} {kg}",
         (
-            f"{_format_number(normal_min_weight)} – "
-            f"{_format_number(normal_max_weight)} {unit_kg}"
+            f"{normal_min_weight:.1f} – "
+            f"{normal_max_weight:.1f} {kg}"
         ),
         (
-            f"{_format_number(remaining_weight)} {unit_kg}"
+            f"{remaining_weight:.1f} {kg}"
             if remaining_weight > 0
-            else (
-                "0 kg"
-                if selected_language == "uz"
-                else "0 кг"
-            )
+            else f"0 {kg}"
         ),
-    ]
+    )
 
-    value_colors = [
+    value_colors = (
         (24, 139, 38),
         (24, 139, 38),
         (31, 110, 205),
         (236, 108, 0),
         (87, 31, 174),
         (184, 20, 20),
-    ]
-    icon_kinds = [
-        "weight",
-        "height",
-        "bmi",
-        "ideal",
-        "range",
-        "remaining",
-    ]
-
-    margin_x = 28
-    gap = 5
-    cards_top = 810
-    cards_bottom = 1000
-    available_width = (
-        CARD_WIDTH
-        - margin_x * 2
-        - gap * 5
     )
-    card_width = available_width // 6
+    icon_codes = (
+        "W",
+        "H",
+        "BMI",
+        "I",
+        "N",
+        "−",
+    )
+
+    margin = 24
+    gap = 5
+    top = 810
+    bottom = 965
+    card_width = (
+        WIDTH
+        - margin * 2
+        - gap * 5
+    ) // 6
 
     for index in range(6):
         left = (
-            margin_x
-            + index * (
-                card_width + gap
+            margin
+            + index
+            * (
+                card_width
+                + gap
             )
         )
         right = left + card_width
 
-        _draw_metric_card(
+        _metric_card(
             draw,
             (
                 left,
-                cards_top,
+                top,
                 right,
-                cards_bottom,
+                bottom,
             ),
             titles[index],
             values[index],
             value_colors[index],
-            icon_kinds[index],
+            icon_codes[index],
         )
 
-    # Pastki motivatsion banner.
     draw.rounded_rectangle(
         (
-            28,
-            1012,
-            CARD_WIDTH - 28,
-            1050,
+            24,
+            974,
+            WIDTH - 24,
+            992,
         ),
-        radius=18,
-        fill=(236, 247, 235),
+        radius=9,
+        fill=LIGHT_GREEN,
     )
 
-    footer_bold = _load_font(
-        22,
-        bold=True,
-    )
-    footer_regular = _load_font(
-        17,
-        bold=False,
-    )
-
-    footer_title = (
+    footer_text = (
         "Sog‘lom va baxtli hayot sari yana bir qadam!"
-        if selected_language == "uz"
+        if language == "uz"
         else
         "Ещё один шаг к здоровой и счастливой жизни!"
     )
-    footer_subtitle = (
-        "To‘g‘ri ovqatlaning, faol bo‘ling va o‘zingizni seving!"
-        if selected_language == "uz"
-        else
-        "Питайтесь правильно, будьте активны и любите себя!"
-    )
 
-    draw.ellipse(
-        (
-            390,
-            1018,
-            422,
-            1048,
-        ),
-        fill=(34, 139, 48),
-    )
     _center_text(
         draw,
-        900,
-        1025,
-        footer_title,
-        footer_bold,
+        WIDTH / 2,
+        983,
+        footer_text,
+        _font(22, bold=True),
         DARK_GREEN,
-    )
-    _center_text(
-        draw,
-        900,
-        1043,
-        footer_subtitle,
-        footer_regular,
-        BLACK,
     )
 
     filename = (
         "bmi_card_"
         f"{category_key}_"
-        f"{bmi:.2f}_"
         f"{datetime.utcnow():%Y%m%d%H%M%S%f}"
         ".png"
-    ).replace(
-        ".",
-        "_",
-    )
-
-    # Oxirgi kengaytmani qayta tiklaymiz.
-    filename = (
-        filename[:-4] + ".png"
-        if filename.endswith("_png")
-        else filename
     )
 
     output_path = OUTPUT_DIR / filename
