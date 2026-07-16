@@ -743,3 +743,4 @@ async def show_today_result(
     )
 
     await callback.answer()
+
