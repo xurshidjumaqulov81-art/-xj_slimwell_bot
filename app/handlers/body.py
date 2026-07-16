@@ -600,3 +600,4 @@ async def show_full_analysis(
     )
 
     await callback.answer()
+
