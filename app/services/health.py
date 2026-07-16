@@ -407,3 +407,4 @@ def get_calorie_text(
         f"🍚 Uglevod: "
         f"<b>{metrics.carbs_g} g</b>"
     )
+
