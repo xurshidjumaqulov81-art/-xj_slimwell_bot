@@ -9,6 +9,9 @@ from app.handlers.exercises import (
 from app.handlers.profile import (
     router as profile_router,
 )
+from app.handlers.results import (
+    router as results_router,
+)
 from app.handlers.slimwell import (
     router as slimwell_router,
 )
@@ -24,3 +27,4 @@ router.include_router(profile_router)
 router.include_router(body_router)
 router.include_router(slimwell_router)
 router.include_router(exercises_router)
+router.include_router(results_router)
