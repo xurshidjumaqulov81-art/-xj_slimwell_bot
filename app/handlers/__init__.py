@@ -6,6 +6,9 @@ from app.handlers.body import (
 from app.handlers.profile import (
     router as profile_router,
 )
+from app.handlers.slimwell import (
+    router as slimwell_router,
+)
 from app.handlers.start import (
     router as start_router,
 )
@@ -16,3 +19,4 @@ router = Router()
 router.include_router(start_router)
 router.include_router(profile_router)
 router.include_router(body_router)
+router.include_router(slimwell_router)
