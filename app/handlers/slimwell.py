@@ -2,11 +2,7 @@ from pathlib import Path
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import (
-    CallbackQuery,
-    FSInputFile,
-    Message,
-)
+from aiogram.types import CallbackQuery, FSInputFile, Message
 
 from app.config import ASSETS_DIR
 from app.content import PRODUCT_CONTENT
@@ -18,11 +14,13 @@ from app.services.health import get_bmi_plan
 
 router = Router()
 
+TELEGRAM_PHOTO_LIMIT = 10 * 1024 * 1024
 
-def card(
-    title: str,
-    body: str,
-) -> str:
+# Bu qiymat mahsulotning tasdiqlangan rasmiy yorlig‘idan olinadi.
+MAX_DAILY_CAPSULES = 3
+
+
+def card(title: str, body: str) -> str:
     return (
         "━━━━━━━━━━━━━━━━━━━━\n"
         f"<b>{title}</b>\n"
@@ -31,9 +29,15 @@ def card(
     )
 
 
-def find_first_existing(
-    paths: list[Path],
-) -> Path | None:
+async def load_user(telegram_id: int):
+    async with SessionFactory() as session:
+        return await get_user(
+            session,
+            telegram_id,
+        )
+
+
+def first_existing(paths: list[Path]) -> Path | None:
     for path in paths:
         if path.exists() and path.is_file():
             return path
@@ -41,102 +45,196 @@ def find_first_existing(
     return None
 
 
+def is_valid_photo(path: Path | None) -> bool:
+    if path is None:
+        return False
+
+    try:
+        return (
+            path.exists()
+            and path.is_file()
+            and path.stat().st_size <= TELEGRAM_PHOTO_LIMIT
+        )
+    except OSError:
+        return False
+
+
 def get_product_image() -> Path | None:
-    return find_first_existing(
+    return first_existing(
         [
-            ASSETS_DIR / "product" / "slimwell.png",
+            ASSETS_DIR / "product" / "slimwell_about.jpg",
+            ASSETS_DIR / "product" / "slimwell_about.png",
             ASSETS_DIR / "product" / "slimwell.jpg",
-            ASSETS_DIR / "product" / "package.png",
+            ASSETS_DIR / "product" / "slimwell.png",
+            ASSETS_DIR / "product" / "product.jpg",
+            ASSETS_DIR / "product" / "product.png",
             ASSETS_DIR / "product.png",
-            ASSETS_DIR / "slimwell.png",
         ]
     )
 
 
-def get_certificate_files() -> list[tuple[str, Path]]:
-    certificate_directory = (
-        ASSETS_DIR / "certificates"
-    )
+def get_certificate_images() -> list[tuple[str, Path]]:
+    directory = ASSETS_DIR / "certificates"
 
     possible_files = [
         (
             "🏅 ISO 22000",
-            certificate_directory / "iso22000.jpg",
-        ),
-        (
-            "🏅 ISO 22000",
-            certificate_directory / "iso22000.png",
-        ),
-        (
-            "🏭 GMP",
-            certificate_directory / "gmp.jpg",
+            [
+                directory / "iso22000.jpg",
+                directory / "iso22000.png",
+                directory / "iso_22000.jpg",
+                directory / "iso_22000.png",
+            ],
         ),
         (
             "🏭 GMP",
-            certificate_directory / "gmp.png",
+            [
+                directory / "gmp.jpg",
+                directory / "gmp.png",
+            ],
         ),
         (
             "🛡 HACCP",
-            certificate_directory / "haccp.jpg",
-        ),
-        (
-            "🛡 HACCP",
-            certificate_directory / "haccp.png",
-        ),
-        (
-            "🌿 HALAL",
-            certificate_directory / "halal.jpg",
+            [
+                directory / "haccp.jpg",
+                directory / "haccp.png",
+            ],
         ),
         (
             "🌿 HALAL",
-            certificate_directory / "halal.png",
+            [
+                directory / "halal.jpg",
+                directory / "halal.png",
+            ],
         ),
         (
             "🌍 FSSAI",
-            certificate_directory / "fssai.jpg",
-        ),
-        (
-            "🌍 FSSAI",
-            certificate_directory / "fssai.png",
+            [
+                directory / "fssai.jpg",
+                directory / "fssai.png",
+            ],
         ),
     ]
 
-    result: list[tuple[str, Path]] = []
-    used_names: set[str] = set()
+    images: list[tuple[str, Path]] = []
 
-    for title, path in possible_files:
-        if (
-            path.exists()
-            and path.is_file()
-            and title not in used_names
-        ):
-            result.append(
-                (
-                    title,
-                    path,
-                )
-            )
-            used_names.add(title)
-
-    combined_file = find_first_existing(
+    combined = first_existing(
         [
+            directory / "certificates.jpg",
+            directory / "certificates.png",
+            directory / "all_certificates.jpg",
+            directory / "all_certificates.png",
+            ASSETS_DIR / "certificates.jpg",
             ASSETS_DIR / "certificates.png",
-            certificate_directory
-            / "certificates.png",
-            certificate_directory
-            / "all_certificates.jpg",
         ]
     )
 
-    if combined_file is not None:
+    if is_valid_photo(combined):
         return [
             (
-                "🏅 XJ SlimWell sertifikatlari",
-                combined_file,
+                "🏅 ISO 22000 · GMP · HACCP · HALAL · FSSAI",
+                combined,
             )
         ]
 
-    return result
+    for title, paths in possible_files:
+        image = first_existing(paths)
+
+        if is_valid_photo(image):
+            images.append(
+                (
+                    title,
+                    image,
+                )
+            )
+
+    return images
+
+
+def get_personal_capsules(
+    bmi: float,
+    age: int | None,
+) -> int | None:
+    if age is None or age < 18:
+        return None
+
+    # Tasdiqlangan ichish tartibingizga mos diapazon.
+    # Hech qachon MAX_DAILY_CAPSULES dan oshmaydi.
+    if bmi < 25:
+        return 2
+
+    if bmi < 30:
+        return 2
+
+    return min(
+        3,
+        MAX_DAILY_CAPSULES,
+    )
+
+
+def get_schedule_uz(capsules: int) -> str:
+    if capsules == 1:
+        return (
+            "🌅 1 kapsula — nonushtadan oldin"
+        )
+
+    if capsules == 2:
+        return (
+            "🌅 1 kapsula — nonushtadan oldin\n"
+            "☀️ 1 kapsula — tushlikdan oldin"
+        )
+
+    return (
+        "🌅 1 kapsula — nonushtadan oldin\n"
+        "☀️ 1 kapsula — tushlikdan oldin\n"
+        "🌙 1 kapsula — kechki ovqatdan oldin"
+    )
+
+
+def get_schedule_ru(capsules: int) -> str:
+    if capsules == 1:
+        return (
+            "🌅 1 капсула — перед завтраком"
+        )
+
+    if capsules == 2:
+        return (
+            "🌅 1 капсула — перед завтраком\n"
+            "☀️ 1 капсула — перед обедом"
+        )
+
+    return (
+        "🌅 1 капсула — перед завтраком\n"
+        "☀️ 1 капсула — перед обедом\n"
+        "🌙 1 капсула — перед ужином"
+    )
+
+
+async def answer_with_optional_photo(
+    message: Message,
+    title: str,
+    body: str,
+    language: str,
+    photo: Path | None = None,
+) -> None:
+    if is_valid_photo(photo):
+        await message.answer_photo(
+            photo=FSInputFile(photo),
+            caption=card(
+                title,
+                body,
+            ),
+            reply_markup=slimwell_menu(language),
+        )
+        return
+
+    await message.answer(
+        card(
+            title,
+            body,
+        ),
+        reply_markup=slimwell_menu(language),
+    )
 
 
 @router.message(
@@ -148,11 +246,9 @@ async def slimwell_section(
 ) -> None:
     await state.clear()
 
-    async with SessionFactory() as session:
-        user = await get_user(
-            session,
-            message.from_user.id,
-        )
+    user = await load_user(
+        message.from_user.id,
+    )
 
     if user is None:
         await message.answer(
@@ -184,10 +280,11 @@ async def slimwell_section(
         body = (
             f"👤 <b>{user.name}</b>\n"
             f"📊 BMI: <b>{metrics.bmi:.2f}</b>\n"
-            f"🎯 Категория: "
-            f"<b>{plan['title']}</b>\n\n"
-            "Здесь вы найдёте режим приёма, "
-            "состав, сертификаты и рекомендации."
+            f"🎯 Категория: <b>{plan['title']}</b>\n\n"
+            "Здесь вы найдёте информацию о продукте, "
+            "способ применения, персональный режим, "
+            "состав и сертификаты.\n\n"
+            "Выберите нужный раздел."
         )
     else:
         title = "💊 XJ SLIMWELL"
@@ -195,52 +292,85 @@ async def slimwell_section(
         body = (
             f"👤 <b>{user.name}</b>\n"
             f"📊 BMI: <b>{metrics.bmi:.2f}</b>\n"
-            f"🎯 Holat: "
-            f"<b>{plan['title']}</b>\n\n"
-            "Bu bo‘limda mahsulotning qabul "
-            "tartibi, tarkibi, sertifikatlari "
-            "va tavsiyalarini ko‘rishingiz mumkin."
+            f"🎯 Holat: <b>{plan['title']}</b>\n\n"
+            "Bu bo‘limda mahsulot haqida ma’lumot, "
+            "qanday ichilishi, shaxsiy qabul rejasi, "
+            "tarkibi va sertifikatlarini ko‘rishingiz mumkin.\n\n"
+            "Kerakli bo‘limni tanlang."
         )
 
-    product_image = get_product_image()
-
-    if product_image is not None:
-        await message.answer_photo(
-            photo=FSInputFile(product_image),
-            caption=card(
-                title,
-                body,
-            ),
-            reply_markup=slimwell_menu(
-                language
-            ),
-        )
-    else:
-        await message.answer(
-            card(
-                title,
-                body,
-            ),
-            reply_markup=slimwell_menu(
-                language
-            ),
-        )
+    await answer_with_optional_photo(
+        message=message,
+        title=title,
+        body=body,
+        language=language,
+        photo=get_product_image(),
+    )
 
 
 @router.callback_query(
-    F.data.in_({
-        "slim:usage",
-        "slim:plan",
-    })
+    F.data == "slim:usage"
 )
 async def slimwell_usage(
     callback: CallbackQuery,
 ) -> None:
-    async with SessionFactory() as session:
-        user = await get_user(
-            session,
-            callback.from_user.id,
+    user = await load_user(
+        callback.from_user.id,
+    )
+
+    if user is None:
+        await callback.answer(
+            "Profil topilmadi.",
+            show_alert=True,
         )
+        return
+
+    language = user.language or "uz"
+
+    if language == "ru":
+        title = "⏰ КАК ПРИНИМАТЬ?"
+
+        body = (
+            "💊 Капсулы принимаются перед едой.\n\n"
+            "🌅 Перед завтраком\n"
+            "☀️ Перед обедом\n"
+            "🌙 Перед ужином\n\n"
+            "💧 Запивайте достаточным количеством воды.\n"
+            "📦 Не превышайте количество, указанное "
+            "на официальной этикетке."
+        )
+    else:
+        title = "⏰ QANDAY ICHILADI?"
+
+        body = (
+            "💊 Kapsulalar ovqatdan oldin qabul qilinadi.\n\n"
+            "🌅 Nonushtadan oldin\n"
+            "☀️ Tushlikdan oldin\n"
+            "🌙 Kechki ovqatdan oldin\n\n"
+            "💧 Har safar yetarli miqdorda suv bilan iching.\n"
+            "📦 Rasmiy yorliqda ko‘rsatilgan miqdordan oshirmang."
+        )
+
+    await callback.message.answer(
+        card(
+            title,
+            body,
+        ),
+        reply_markup=slimwell_menu(language),
+    )
+
+    await callback.answer()
+
+
+@router.callback_query(
+    F.data == "slim:plan"
+)
+async def slimwell_plan(
+    callback: CallbackQuery,
+) -> None:
+    user = await load_user(
+        callback.from_user.id,
+    )
 
     if user is None:
         await callback.answer(
@@ -258,80 +388,71 @@ async def slimwell_usage(
         )
     except ValueError:
         await callback.answer(
-            "Profil ma’lumotlari to‘liq emas.",
+            (
+                "Profil ma’lumotlari to‘liq emas."
+                if language == "uz"
+                else
+                "Данные профиля заполнены не полностью."
+            ),
             show_alert=True,
         )
         return
 
-    if user.age is not None and user.age < 18:
+    capsules = get_personal_capsules(
+        bmi=metrics.bmi,
+        age=user.age,
+    )
+
+    if capsules is None:
         if language == "ru":
+            title = "📅 МОЙ РЕЖИМ ПРИЁМА"
+
             body = (
                 f"📊 BMI: <b>{metrics.bmi:.2f}</b>\n"
-                f"🎯 Категория: "
-                f"<b>{plan['title']}</b>\n\n"
+                f"🎯 Категория: <b>{plan['title']}</b>\n\n"
                 "Для пользователей младше 18 лет "
-                "бот не назначает количество капсул.\n\n"
-                "Используйте продукт только согласно "
-                "официальной инструкции и с участием "
-                "родителя или ответственного взрослого."
+                "бот не рассчитывает количество капсул."
             )
-
-            title = "⏰ РЕЖИМ ПРИЁМА"
         else:
+            title = "📅 MENING QABUL REJAM"
+
             body = (
                 f"📊 BMI: <b>{metrics.bmi:.2f}</b>\n"
-                f"🎯 Holat: "
-                f"<b>{plan['title']}</b>\n\n"
-                "18 yoshgacha bo‘lgan foydalanuvchiga "
-                "bot kapsula miqdorini belgilamaydi.\n\n"
-                "Mahsulotdan faqat rasmiy yo‘riqnoma "
-                "va ota-ona yoki mas’ul katta ishtirokida "
-                "foydalaning."
+                f"🎯 Holat: <b>{plan['title']}</b>\n\n"
+                "18 yoshgacha bo‘lgan foydalanuvchi "
+                "uchun bot kapsula miqdorini hisoblamaydi."
             )
+    elif language == "ru":
+        title = "📅 МОЙ РЕЖИМ ПРИЁМА"
 
-            title = "⏰ QABUL QILISH TARTIBI"
+        body = (
+            f"📊 BMI: <b>{metrics.bmi:.2f}</b>\n"
+            f"🎯 Категория: <b>{plan['title']}</b>\n\n"
+            f"💊 <b>Ваш режим: {capsules} капсулы в день</b>\n\n"
+            f"{get_schedule_ru(capsules)}\n\n"
+            "💧 Запивайте водой.\n"
+            f"📦 Максимум по настройке продукта: "
+            f"{MAX_DAILY_CAPSULES} капсулы."
+        )
     else:
-        if language == "ru":
-            body = (
-                f"📊 BMI: <b>{metrics.bmi:.2f}</b>\n"
-                f"🎯 Категория: "
-                f"<b>{plan['title']}</b>\n\n"
-                "💊 <b>Размер порции по этикетке: "
-                "3 капсулы</b>\n\n"
-                "🌅 1 капсула перед завтраком\n"
-                "☀️ 1 капсула перед обедом\n"
-                "🌙 1 капсула перед ужином\n\n"
-                "💧 Запивайте водой.\n"
-                "📦 Не превышайте количество, "
-                "указанное на официальной этикетке."
-            )
+        title = "📅 MENING QABUL REJAM"
 
-            title = "⏰ РЕЖИМ ПРИЁМА"
-        else:
-            body = (
-                f"📊 BMI: <b>{metrics.bmi:.2f}</b>\n"
-                f"🎯 Holat: "
-                f"<b>{plan['title']}</b>\n\n"
-                "💊 <b>Yorliqdagi porsiya miqdori: "
-                "3 kapsula</b>\n\n"
-                "🌅 1 kapsula — nonushtadan oldin\n"
-                "☀️ 1 kapsula — tushlikdan oldin\n"
-                "🌙 1 kapsula — kechki ovqatdan oldin\n\n"
-                "💧 Suv bilan iching.\n"
-                "📦 Rasmiy yorliqda ko‘rsatilgan "
-                "miqdordan oshirmang."
-            )
-
-            title = "⏰ QABUL QILISH TARTIBI"
+        body = (
+            f"📊 BMI: <b>{metrics.bmi:.2f}</b>\n"
+            f"🎯 Holat: <b>{plan['title']}</b>\n\n"
+            f"💊 <b>Siz uchun: kuniga {capsules} kapsula</b>\n\n"
+            f"{get_schedule_uz(capsules)}\n\n"
+            "💧 Har safar suv bilan iching.\n"
+            f"📦 Mahsulot sozlamasidagi maksimal miqdor: "
+            f"{MAX_DAILY_CAPSULES} kapsula."
+        )
 
     await callback.message.answer(
         card(
             title,
             body,
         ),
-        reply_markup=slimwell_menu(
-            language
-        ),
+        reply_markup=slimwell_menu(language),
     )
 
     await callback.answer()
@@ -343,7 +464,7 @@ async def slimwell_usage(
 async def slimwell_about(
     callback: CallbackQuery,
 ) -> None:
-    await send_product_content(
+    await send_content(
         callback=callback,
         content_key="about",
         uz_title="💎 MAHSULOT HAQIDA",
@@ -358,11 +479,11 @@ async def slimwell_about(
 async def slimwell_ingredients(
     callback: CallbackQuery,
 ) -> None:
-    await send_product_content(
+    await send_content(
         callback=callback,
         content_key="ingredients",
         uz_title="🧪 TARKIBI VA FOYDASI",
-        ru_title="🧪 СОСТАВ",
+        ru_title="🧪 СОСТАВ И СВОЙСТВА",
     )
 
 
@@ -372,7 +493,7 @@ async def slimwell_ingredients(
 async def slimwell_storage(
     callback: CallbackQuery,
 ) -> None:
-    await send_product_content(
+    await send_content(
         callback=callback,
         content_key="storage",
         uz_title="📦 SAQLASH SHARTLARI",
@@ -386,7 +507,7 @@ async def slimwell_storage(
 async def slimwell_warnings(
     callback: CallbackQuery,
 ) -> None:
-    await send_product_content(
+    await send_content(
         callback=callback,
         content_key="warnings",
         uz_title="💚 ESLATMA",
@@ -400,7 +521,7 @@ async def slimwell_warnings(
 async def slimwell_faq(
     callback: CallbackQuery,
 ) -> None:
-    await send_product_content(
+    await send_content(
         callback=callback,
         content_key="faq",
         uz_title="❓ TAVSIYALAR",
@@ -408,18 +529,16 @@ async def slimwell_faq(
     )
 
 
-async def send_product_content(
+async def send_content(
     callback: CallbackQuery,
     content_key: str,
     uz_title: str,
     ru_title: str,
     include_product_image: bool = False,
 ) -> None:
-    async with SessionFactory() as session:
-        user = await get_user(
-            session,
-            callback.from_user.id,
-        )
+    user = await load_user(
+        callback.from_user.id,
+    )
 
     if user is None:
         await callback.answer(
@@ -429,45 +548,38 @@ async def send_product_content(
         return
 
     language = user.language or "uz"
+
     title = (
         ru_title
         if language == "ru"
         else uz_title
     )
 
-    body = PRODUCT_CONTENT[
-        language
-    ][content_key]
+    try:
+        body = PRODUCT_CONTENT[
+            language
+        ][content_key]
+    except KeyError:
+        body = (
+            "Ma’lumot vaqtincha topilmadi."
+            if language == "uz"
+            else
+            "Информация временно недоступна."
+        )
 
-    product_image = (
+    photo = (
         get_product_image()
         if include_product_image
         else None
     )
 
-    if product_image is not None:
-        await callback.message.answer_photo(
-            photo=FSInputFile(
-                product_image
-            ),
-            caption=card(
-                title,
-                body,
-            ),
-            reply_markup=slimwell_menu(
-                language
-            ),
-        )
-    else:
-        await callback.message.answer(
-            card(
-                title,
-                body,
-            ),
-            reply_markup=slimwell_menu(
-                language
-            ),
-        )
+    await answer_with_optional_photo(
+        message=callback.message,
+        title=title,
+        body=body,
+        language=language,
+        photo=photo,
+    )
 
     await callback.answer()
 
@@ -478,11 +590,9 @@ async def send_product_content(
 async def slimwell_certificates(
     callback: CallbackQuery,
 ) -> None:
-    async with SessionFactory() as session:
-        user = await get_user(
-            session,
-            callback.from_user.id,
-        )
+    user = await load_user(
+        callback.from_user.id,
+    )
 
     if user is None:
         await callback.answer(
@@ -492,32 +602,26 @@ async def slimwell_certificates(
         return
 
     language = user.language or "uz"
-    certificate_files = (
-        get_certificate_files()
+
+    title = (
+        "🏅 СЕРТИФИКАТЫ"
+        if language == "ru"
+        else "🏅 SERTIFIKATLAR"
     )
 
-    if language == "ru":
-        title = "🏅 СЕРТИФИКАТЫ"
-        intro = (
-            "ISO 22000 · GMP · HACCP · "
-            "HALAL · FSSAI"
-        )
-    else:
-        title = "🏅 SERTIFIKATLAR"
-        intro = (
-            "ISO 22000 · GMP · HACCP · "
-            "HALAL · FSSAI"
-        )
+    names = (
+        "ISO 22000 · GMP · HACCP · HALAL · FSSAI"
+    )
 
-    if not certificate_files:
+    images = get_certificate_images()
+
+    if not images:
         await callback.message.answer(
             card(
                 title,
-                intro,
+                names,
             ),
-            reply_markup=slimwell_menu(
-                language
-            ),
+            reply_markup=slimwell_menu(language),
         )
 
         await callback.answer()
@@ -526,18 +630,14 @@ async def slimwell_certificates(
     await callback.message.answer(
         card(
             title,
-            intro,
+            names,
         )
     )
 
-    for certificate_title, file_path in (
-        certificate_files
-    ):
+    for image_title, image_path in images:
         await callback.message.answer_photo(
-            photo=FSInputFile(
-                file_path
-            ),
-            caption=certificate_title,
+            photo=FSInputFile(image_path),
+            caption=image_title,
         )
 
     await callback.message.answer(
@@ -547,9 +647,7 @@ async def slimwell_certificates(
             else
             "Выберите нужный раздел."
         ),
-        reply_markup=slimwell_menu(
-            language
-        ),
+        reply_markup=slimwell_menu(language),
     )
 
     await callback.answer()
