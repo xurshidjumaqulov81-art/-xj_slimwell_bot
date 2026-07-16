@@ -971,3 +971,4 @@ def create_progress_bar(
     )
 
     return output_path
+
