@@ -1,12 +1,9 @@
 from aiogram.fsm.state import State, StatesGroup
 
 
-# =====================================
-# REGISTRATION
-# =====================================
-
-class Registration(StatesGroup):
+class Onboarding(StatesGroup):
     language = State()
+    personal_id = State()
     name = State()
     age = State()
     gender = State()
@@ -16,20 +13,13 @@ class Registration(StatesGroup):
     activity = State()
 
 
-# =====================================
-# PROFILE EDIT
-# =====================================
+# Backward-compatible alias for older code.
+Registration = Onboarding
+
 
 class EditProfile(StatesGroup):
-    name = State()
-    age = State()
-    height = State()
-    weight = State()
+    value = State()
 
-
-# =====================================
-# HABITS
-# =====================================
 
 class HabitInput(StatesGroup):
     water = State()
@@ -38,19 +28,12 @@ class HabitInput(StatesGroup):
     weight = State()
 
 
-# =====================================
-# FOOD
-# =====================================
-
 class FoodInput(StatesGroup):
     photo = State()
     description = State()
 
 
-# =====================================
-# ADMIN
-# =====================================
-
 class AdminState(StatesGroup):
     broadcast = State()
     search = State()
+
