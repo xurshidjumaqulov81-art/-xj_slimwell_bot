@@ -412,3 +412,329 @@ async def save_custom_water(
             language
         ),
     )
+from app.database.crud import (
+    add_sleep,
+    add_steps,
+)
+
+
+@router.callback_query(
+    F.data == "habit:steps"
+)
+async def start_steps_input(
+    callback: CallbackQuery,
+    state: FSMContext,
+) -> None:
+    user = await load_user(
+        callback.from_user.id,
+    )
+
+    if user is None:
+        await callback.answer(
+            "Profil topilmadi.",
+            show_alert=True,
+        )
+        return
+
+    language = user.language or "uz"
+
+    await state.clear()
+    await state.set_state(
+        HabitInput.steps
+    )
+
+    await callback.message.answer(
+        (
+            "👣 Bugungi qadamlar sonini kiriting.\n\n"
+            "Masalan: <b>6500</b>"
+            if language == "uz"
+            else
+            "👣 Введите количество шагов за сегодня.\n\n"
+            "Например: <b>6500</b>"
+        )
+    )
+
+    await callback.answer()
+
+
+@router.message(
+    HabitInput.steps
+)
+async def save_steps(
+    message: Message,
+    state: FSMContext,
+) -> None:
+    user = await load_user(
+        message.from_user.id,
+    )
+
+    if user is None:
+        await state.clear()
+        await message.answer(
+            "Profil topilmadi. / Профиль не найден."
+        )
+        return
+
+    language = user.language or "uz"
+
+    try:
+        steps = int(
+            (message.text or "").strip()
+        )
+
+        if not 0 <= steps <= 100000:
+            raise ValueError
+
+    except (TypeError, ValueError):
+        await message.answer(
+            (
+                "Qadamlar sonini 0–100000 oralig‘ida kiriting."
+                if language == "uz"
+                else
+                "Введите число шагов от 0 до 100000."
+            )
+        )
+        return
+
+    async with SessionFactory() as session:
+        await add_steps(
+            session=session,
+            user_id=user.id,
+            steps=steps,
+        )
+
+    await state.clear()
+
+    await message.answer(
+        card(
+            (
+                "✅ QADAMLAR SAQLANDI"
+                if language == "uz"
+                else "✅ ШАГИ СОХРАНЕНЫ"
+            ),
+            (
+                f"👣 Bugungi qadamlar: <b>{steps}</b>"
+                if language == "uz"
+                else
+                f"👣 Шаги за сегодня: <b>{steps}</b>"
+            ),
+        ),
+        reply_markup=habits_menu(
+            language
+        ),
+    )
+
+
+@router.callback_query(
+    F.data == "habit:sleep"
+)
+async def start_sleep_input(
+    callback: CallbackQuery,
+    state: FSMContext,
+) -> None:
+    user = await load_user(
+        callback.from_user.id,
+    )
+
+    if user is None:
+        await callback.answer(
+            "Profil topilmadi.",
+            show_alert=True,
+        )
+        return
+
+    language = user.language or "uz"
+
+    await state.clear()
+    await state.set_state(
+        HabitInput.sleep
+    )
+
+    await callback.message.answer(
+        (
+            "🌙 Necha soat uxlaganingizni kiriting.\n\n"
+            "Masalan: <b>7.5</b>"
+            if language == "uz"
+            else
+            "🌙 Введите количество часов сна.\n\n"
+            "Например: <b>7.5</b>"
+        )
+    )
+
+    await callback.answer()
+
+
+@router.message(
+    HabitInput.sleep
+)
+async def save_sleep(
+    message: Message,
+    state: FSMContext,
+) -> None:
+    user = await load_user(
+        message.from_user.id,
+    )
+
+    if user is None:
+        await state.clear()
+        await message.answer(
+            "Profil topilmadi. / Профиль не найден."
+        )
+        return
+
+    language = user.language or "uz"
+
+    try:
+        hours = float(
+            (message.text or "")
+            .strip()
+            .replace(",", ".")
+        )
+
+        if not 0 <= hours <= 24:
+            raise ValueError
+
+    except (TypeError, ValueError):
+        await message.answer(
+            (
+                "Uyqu vaqtini 0–24 soat oralig‘ida kiriting."
+                if language == "uz"
+                else
+                "Введите время сна от 0 до 24 часов."
+            )
+        )
+        return
+
+    async with SessionFactory() as session:
+        await add_sleep(
+            session=session,
+            user_id=user.id,
+            hours=hours,
+        )
+
+    await state.clear()
+
+    await message.answer(
+        card(
+            (
+                "✅ UYQU SAQLANDI"
+                if language == "uz"
+                else "✅ СОН СОХРАНЁН"
+            ),
+            (
+                f"🌙 Bugungi uyqu: <b>{hours:g} soat</b>"
+                if language == "uz"
+                else
+                f"🌙 Сон сегодня: <b>{hours:g} часов</b>"
+            ),
+        ),
+        reply_markup=habits_menu(
+            language
+        ),
+    )
+
+
+@router.callback_query(
+    F.data == "habit:today"
+)
+async def show_today_habits(
+    callback: CallbackQuery,
+) -> None:
+    user = await load_user(
+        callback.from_user.id,
+    )
+
+    if user is None:
+        await callback.answer(
+            "Profil topilmadi.",
+            show_alert=True,
+        )
+        return
+
+    language = user.language or "uz"
+
+    async with SessionFactory() as session:
+        summary = await get_today_summary(
+            session,
+            user.id,
+        )
+
+    water = int(
+        summary["water_ml"]
+    )
+    steps = int(
+        summary["steps"]
+    )
+    sleep = float(
+        summary["sleep_hours"]
+    )
+    exercise = int(
+        summary["exercise_minutes"]
+    )
+
+    target_water = water_target_ml(
+        user.current_weight_kg
+    )
+
+    water_percent = min(
+        round(
+            water / target_water * 100
+        ),
+        100,
+    )
+
+    steps_percent = min(
+        round(
+            steps / 10000 * 100
+        ),
+        100,
+    )
+
+    sleep_percent = min(
+        round(
+            sleep / 8 * 100
+        ),
+        100,
+    )
+
+    daily_score = round(
+        (
+            water_percent
+            + steps_percent
+            + sleep_percent
+        )
+        / 3
+    )
+
+    if language == "ru":
+        title = "📊 ОТЧЁТ ЗА СЕГОДНЯ"
+
+        body = (
+            f"💧 Вода: <b>{water} / {target_water} мл</b>\n"
+            f"👣 Шаги: <b>{steps} / 10000</b>\n"
+            f"🌙 Сон: <b>{sleep:g} / 8 часов</b>\n"
+            f"💪 Упражнения: <b>{exercise} минут</b>\n\n"
+            f"⭐ Результат дня: <b>{daily_score}%</b>"
+        )
+    else:
+        title = "📊 BUGUNGI HISOBOT"
+
+        body = (
+            f"💧 Suv: <b>{water} / {target_water} ml</b>\n"
+            f"👣 Qadam: <b>{steps} / 10000</b>\n"
+            f"🌙 Uyqu: <b>{sleep:g} / 8 soat</b>\n"
+            f"💪 Mashq: <b>{exercise} daqiqa</b>\n\n"
+            f"⭐ Kunlik natija: <b>{daily_score}%</b>"
+        )
+
+    await callback.message.answer(
+        card(
+            title,
+            body,
+        ),
+        reply_markup=habits_menu(
+            language
+        ),
+    )
+
+    await callback.answer()
