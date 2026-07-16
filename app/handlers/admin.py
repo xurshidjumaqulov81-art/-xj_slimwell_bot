@@ -10,7 +10,7 @@ from app.database.crud import (
 from app.database.db import SessionFactory
 from app.keyboards import admin_menu
 from app.services.health import get_bmi_plan
-from app.states import AdminSearch
+from app.states import AdminState
 
 
 router = Router()
@@ -122,7 +122,7 @@ async def start_admin_search(
 
     await state.clear()
     await state.set_state(
-        AdminSearch.personal_id
+        AdminState.search
     )
 
     await callback.message.answer(
@@ -137,7 +137,7 @@ async def start_admin_search(
 
 
 @router.message(
-    AdminSearch.personal_id
+    AdminState.search
 )
 async def search_user_by_id(
     message: Message,
@@ -200,9 +200,25 @@ async def search_user_by_id(
         bmi_text = "—"
         category_text = "Profil to‘liq emas"
 
+    registered_at = (
+        user.registered_at.strftime(
+            "%d.%m.%Y %H:%M"
+        )
+        if user.registered_at
+        else "—"
+    )
+
+    last_active_at = (
+        user.last_active_at.strftime(
+            "%d.%m.%Y %H:%M"
+        )
+        if user.last_active_at
+        else "—"
+    )
+
     body = (
         f"🆔 Shaxsiy ID: "
-        f"<b>{user.personal_id}</b>\n"
+        f"<b>{user.personal_id or '—'}</b>\n"
         f"👤 Ism: <b>{user.name or '—'}</b>\n"
         f"📱 Telegram ID: "
         f"<b>{user.telegram_id}</b>\n"
@@ -214,9 +230,9 @@ async def search_user_by_id(
         f"📊 BMI: <b>{bmi_text}</b>\n"
         f"🎯 Holat: <b>{category_text}</b>\n\n"
         f"📅 Ro‘yxatdan o‘tgan:\n"
-        f"<b>{user.registered_at:%d.%m.%Y %H:%M}</b>\n\n"
+        f"<b>{registered_at}</b>\n\n"
         f"🕒 Oxirgi faollik:\n"
-        f"<b>{user.last_active_at:%d.%m.%Y %H:%M}</b>"
+        f"<b>{last_active_at}</b>"
     )
 
     await message.answer(
