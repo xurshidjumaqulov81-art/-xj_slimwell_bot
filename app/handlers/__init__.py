@@ -20,3 +20,4 @@ router.include_router(exercises_router)
 router.include_router(results_router)
 router.include_router(habits_router)
 router.include_router(admin_router)
+
