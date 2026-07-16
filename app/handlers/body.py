@@ -218,23 +218,27 @@ async def show_calories(
         return
 
     if language == "ru":
-        body = (
-            f"🧍 Базовый обмен: "
-            f"<b>{metrics.bmr} ккал</b>\n"
-            f"⚖️ Поддержание веса: "
-            f"<b>{metrics.maintenance_kcal} ккал</b>\n\n"
-            f"{get_calorie_text(metrics, language)}"
-        )
+       body = (
+    f"🔥 Основной расход энергии организма:\n"
+    f"<b>{metrics.bmr} ккал</b>\n\n"
+
+    f"⚖️ Для поддержания текущего веса:\n"
+    f"<b>{metrics.maintenance_kcal} ккал</b>\n\n"
+
+    f"{get_calorie_text(metrics, language)}"
+)
 
         title = "⚡ ДНЕВНАЯ ЭНЕРГИЯ"
     else:
         body = (
-            f"🧍 Bazal almashinuv: "
-            f"<b>{metrics.bmr} kkal</b>\n"
-            f"⚖️ Vaznni saqlash: "
-            f"<b>{metrics.maintenance_kcal} kkal</b>\n\n"
-            f"{get_calorie_text(metrics, language)}"
-        )
+    f"🔥 Tananing asosiy energiya sarfi:\n"
+    f"<b>{metrics.bmr} kkal</b>\n\n"
+
+    f"⚖️ Hozirgi vaznni saqlash uchun:\n"
+    f"<b>{metrics.maintenance_kcal} kkal</b>\n\n"
+
+    f"{get_calorie_text(metrics, language)}"
+)
 
         title = "⚡ KUNLIK ENERGIYA"
 
@@ -319,13 +323,12 @@ async def show_weight_range(
             "ideal vazn"
         )
 
-        if remaining_weight > 0:
-            body += (
-                "\n\n"
-                f"🎯 Norma oralig‘ining yuqori "
-                f"chegarasigacha:\n"
-                f"<b>{remaining_weight} kg</b>"
-            )
+       if remaining_weight > 0:
+    body += (
+        "\n\n"
+        "🎯 Sog'lom vaznga erishish uchun:\n\n"
+        f"Siz yana <b>{remaining_weight} kg</b> vazn tashlashingiz kerak."
+    )
 
         title = "🎯 NORMA VA IDEAL VAZN"
 
@@ -431,12 +434,11 @@ async def show_full_analysis(
         )
 
         if remaining_weight > 0:
-            body += (
-                "\n\n"
-                f"🎯 Norma chegarasigacha: "
-                f"<b>{remaining_weight} kg</b>"
-            )
-
+    body += (
+        "\n\n"
+        "🎯 Sog'lom vaznga erishish uchun:\n\n"
+        f"Siz yana <b>{remaining_weight} kg</b> vazn tashlashingiz kerak."
+    )
         body += (
             "\n\n"
             "🌿 Siz to‘g‘ri yo‘ldasiz. "
