@@ -738,3 +738,4 @@ async def show_today_habits(
     )
 
     await callback.answer()
+
