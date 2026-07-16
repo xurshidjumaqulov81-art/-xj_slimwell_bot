@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import tempfile
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -13,8 +12,11 @@ OUTPUT_DIR = ASSETS_DIR / "generated"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    candidates = []
+def _load_font(
+    size: int,
+    bold: bool = False,
+) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    candidates: list[str] = []
 
     if bold:
         candidates.extend(
@@ -31,14 +33,22 @@ def _load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageF
             ]
         )
 
-    for path in candidates:
-        if Path(path).exists():
-            return ImageFont.truetype(path, size=size)
+    for font_path in candidates:
+        path = Path(font_path)
+
+        if path.exists():
+            return ImageFont.truetype(
+                str(path),
+                size=size,
+            )
 
     return ImageFont.load_default()
 
 
-def _category_title(category_key: str, language: str) -> str:
+def _category_title(
+    category_key: str,
+    language: str,
+) -> str:
     titles = {
         "uz": {
             "underweight": "Kam vazn",
@@ -58,19 +68,27 @@ def _category_title(category_key: str, language: str) -> str:
         },
     }
 
-    return titles.get(language, titles["uz"]).get(
+    return titles.get(
+        language,
+        titles["uz"],
+    ).get(
         category_key,
         category_key,
     )
 
 
-def _bmi_to_angle(bmi: float) -> float:
+def _bmi_to_angle(
+    bmi: float,
+) -> float:
     minimum_bmi = 14.0
     maximum_bmi = 45.0
 
     limited_bmi = max(
         minimum_bmi,
-        min(bmi, maximum_bmi),
+        min(
+            bmi,
+            maximum_bmi,
+        ),
     )
 
     ratio = (
@@ -79,7 +97,8 @@ def _bmi_to_angle(bmi: float) -> float:
         maximum_bmi - minimum_bmi
     )
 
-    return 180 - (ratio * 180)
+    # 180° dan 360° gacha — yuqori yarim doira.
+    return 180 + ratio * 180
 
 
 def _draw_centered_text(
@@ -98,11 +117,11 @@ def _draw_centered_text(
     width = box[2] - box[0]
     height = box[3] - box[1]
 
-    x = xy[0] - width // 2
-    y = xy[1] - height // 2
-
     draw.text(
-        (x, y),
+        (
+            xy[0] - width // 2,
+            xy[1] - height // 2,
+        ),
         text,
         font=font,
         fill=fill,
@@ -119,7 +138,7 @@ def create_bmi_card(
     language: str = "uz",
 ) -> Path:
     width = 1200
-    height = 1200
+    height = 1080
 
     image = Image.new(
         "RGB",
@@ -129,14 +148,34 @@ def create_bmi_card(
 
     draw = ImageDraw.Draw(image)
 
-    title_font = _load_font(58, bold=True)
-    large_font = _load_font(94, bold=True)
-    medium_font = _load_font(42, bold=True)
-    normal_font = _load_font(34)
-    small_font = _load_font(27)
+    title_font = _load_font(
+        70,
+        bold=True,
+    )
+    large_font = _load_font(
+        102,
+        bold=True,
+    )
+    medium_font = _load_font(
+        54,
+        bold=True,
+    )
+    normal_font = _load_font(
+        42,
+        bold=False,
+    )
+    small_font = _load_font(
+        34,
+        bold=True,
+    )
 
     draw.rounded_rectangle(
-        (35, 35, width - 35, height - 35),
+        (
+            35,
+            35,
+            width - 35,
+            height - 35,
+        ),
         radius=45,
         fill=(255, 255, 255),
         outline=(38, 146, 75),
@@ -151,7 +190,10 @@ def create_bmi_card(
 
     _draw_centered_text(
         draw,
-        (width // 2, 105),
+        (
+            width // 2,
+            105,
+        ),
         title,
         title_font,
         (24, 100, 48),
@@ -161,7 +203,7 @@ def create_bmi_card(
     center_y = 610
 
     outer_radius = 420
-    inner_radius = 265
+    arc_width = 150
 
     zones = [
         (14.0, 18.5, (85, 170, 235)),
@@ -172,21 +214,23 @@ def create_bmi_card(
         (40.0, 45.0, (155, 30, 30)),
     ]
 
+    arc_box = (
+        center_x - outer_radius,
+        center_y - outer_radius,
+        center_x + outer_radius,
+        center_y + outer_radius,
+    )
+
     for start_bmi, end_bmi, color in zones:
         start_angle = _bmi_to_angle(start_bmi)
         end_angle = _bmi_to_angle(end_bmi)
 
         draw.arc(
-            (
-                center_x - outer_radius,
-                center_y - outer_radius,
-                center_x + outer_radius,
-                center_y + outer_radius,
-            ),
-            start=end_angle,
-            end=start_angle,
+            arc_box,
+            start=start_angle,
+            end=end_angle,
             fill=color,
-            width=outer_radius - inner_radius,
+            width=arc_width,
         )
 
     for value in [18.5, 25, 30, 35, 40]:
@@ -194,22 +238,26 @@ def create_bmi_card(
             _bmi_to_angle(value)
         )
 
-        label_radius = 355
+        label_radius = 330
 
         x = center_x + (
-            math.cos(angle) * label_radius
+            math.cos(angle)
+            * label_radius
         )
-
-        y = center_y - (
-            math.sin(angle) * label_radius
+        y = center_y + (
+            math.sin(angle)
+            * label_radius
         )
 
         _draw_centered_text(
             draw,
-            (int(x), int(y)),
+            (
+                int(x),
+                int(y),
+            ),
             str(value),
             small_font,
-            (40, 40, 40),
+            (25, 25, 25),
         )
 
     needle_angle = math.radians(
@@ -219,11 +267,12 @@ def create_bmi_card(
     needle_length = 310
 
     end_x = center_x + (
-        math.cos(needle_angle) * needle_length
+        math.cos(needle_angle)
+        * needle_length
     )
-
-    end_y = center_y - (
-        math.sin(needle_angle) * needle_length
+    end_y = center_y + (
+        math.sin(needle_angle)
+        * needle_length
     )
 
     draw.line(
@@ -234,42 +283,72 @@ def create_bmi_card(
             int(end_y),
         ),
         fill=(25, 25, 25),
-        width=22,
+        width=24,
     )
 
-    arrow_size = 35
+    arrow_size = 42
 
-    left_angle = needle_angle + math.radians(150)
-    right_angle = needle_angle - math.radians(150)
+    left_angle = (
+        needle_angle
+        + math.radians(150)
+    )
+    right_angle = (
+        needle_angle
+        - math.radians(150)
+    )
 
-    left_x = end_x + math.cos(left_angle) * arrow_size
-    left_y = end_y - math.sin(left_angle) * arrow_size
+    left_x = end_x + (
+        math.cos(left_angle)
+        * arrow_size
+    )
+    left_y = end_y + (
+        math.sin(left_angle)
+        * arrow_size
+    )
 
-    right_x = end_x + math.cos(right_angle) * arrow_size
-    right_y = end_y - math.sin(right_angle) * arrow_size
+    right_x = end_x + (
+        math.cos(right_angle)
+        * arrow_size
+    )
+    right_y = end_y + (
+        math.sin(right_angle)
+        * arrow_size
+    )
 
     draw.polygon(
         [
-            (int(end_x), int(end_y)),
-            (int(left_x), int(left_y)),
-            (int(right_x), int(right_y)),
+            (
+                int(end_x),
+                int(end_y),
+            ),
+            (
+                int(left_x),
+                int(left_y),
+            ),
+            (
+                int(right_x),
+                int(right_y),
+            ),
         ],
         fill=(25, 25, 25),
     )
 
     draw.ellipse(
         (
-            center_x - 30,
-            center_y - 30,
-            center_x + 30,
-            center_y + 30,
+            center_x - 34,
+            center_y - 34,
+            center_x + 34,
+            center_y + 34,
         ),
         fill=(40, 40, 40),
     )
 
     _draw_centered_text(
         draw,
-        (center_x, 710),
+        (
+            center_x,
+            700,
+        ),
         f"BMI {bmi:.2f}",
         large_font,
         (20, 80, 40),
@@ -282,7 +361,10 @@ def create_bmi_card(
 
     _draw_centered_text(
         draw,
-        (center_x, 805),
+        (
+            center_x,
+            795,
+        ),
         category,
         medium_font,
         (40, 40, 40),
@@ -290,44 +372,45 @@ def create_bmi_card(
 
     if language == "ru":
         range_text = (
-            f"Нормальный диапазон: "
+            "Нормальный диапазон: "
             f"{normal_min_weight:.1f}–"
             f"{normal_max_weight:.1f} кг"
         )
-
         ideal_text = (
-            f"Идеальный вес: "
+            "Идеальный вес: "
             f"{ideal_weight:.1f} кг"
         )
-
         remaining_text = (
-            f"До здорового веса: "
+            "До здорового веса: "
             f"{remaining_weight:.1f} кг"
             if remaining_weight > 0
-            else "Ваш вес находится в здоровом диапазоне"
+            else
+            "Ваш вес находится в здоровом диапазоне"
         )
     else:
         range_text = (
-            f"Norma vazn oralig‘i: "
+            "Norma vazn oralig‘i: "
             f"{normal_min_weight:.1f}–"
             f"{normal_max_weight:.1f} kg"
         )
-
         ideal_text = (
-            f"Ideal vazn: "
+            "Ideal vazn: "
             f"{ideal_weight:.1f} kg"
         )
-
         remaining_text = (
-            f"Sog‘lom vazngacha: "
+            "Sog‘lom vazngacha: "
             f"{remaining_weight:.1f} kg"
             if remaining_weight > 0
-            else "Vazningiz sog‘lom oraliqda"
+            else
+            "Vazningiz sog‘lom oraliqda"
         )
 
     _draw_centered_text(
         draw,
-        (center_x, 900),
+        (
+            center_x,
+            885,
+        ),
         range_text,
         normal_font,
         (40, 40, 40),
@@ -335,21 +418,32 @@ def create_bmi_card(
 
     _draw_centered_text(
         draw,
-        (center_x, 955),
+        (
+            center_x,
+            945,
+        ),
         ideal_text,
         normal_font,
         (40, 40, 40),
     )
 
     draw.rounded_rectangle(
-        (150, 1010, width - 150, 1105),
-        radius=30,
+        (
+            120,
+            985,
+            width - 120,
+            1045,
+        ),
+        radius=28,
         fill=(228, 245, 232),
     )
 
     _draw_centered_text(
         draw,
-        (center_x, 1058),
+        (
+            center_x,
+            1015,
+        ),
         remaining_text,
         medium_font,
         (24, 110, 50),
@@ -359,7 +453,10 @@ def create_bmi_card(
         f"bmi_{bmi:.2f}_"
         f"{category_key}_"
         f"{language}.png"
-    ).replace(".", "_")
+    ).replace(
+        ".",
+        "_",
+    )
 
     output_path = OUTPUT_DIR / filename
 
