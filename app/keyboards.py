@@ -813,3 +813,4 @@ def admin_menu() -> InlineKeyboardMarkup:
         ],
         columns=1,
     )
+
