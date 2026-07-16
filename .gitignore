@@ -1,40 +1,12 @@
-# Maxfiy sozlamalar
-.env
-.env.local
-.env.production
+# Fixes applied
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
+- Added the `Onboarding` FSM group required by `app/handlers/start.py`.
+- Added the missing `personal_id` onboarding state.
+- Kept `Registration` as a backward-compatible alias.
+- Added the generic `EditProfile.value` state required by `app/handlers/profile.py`.
+- Confirmed `AdminState.search` matches `app/handlers/admin.py`.
+- Verified all Python files compile successfully.
+- Verified `app.handlers` imports successfully with the declared dependencies.
+- Verified a fresh SQLite database initializes successfully.
+- Smoke-tested BMI calculation and BMI image generation.
 
-# Virtual environment
-.venv/
-venv/
-env/
-
-# Mahalliy database
-*.db
-*.sqlite
-*.sqlite3
-
-# Logs
-*.log
-
-# IDE
-.vscode/
-.idea/
-
-# macOS
-.DS_Store
-
-# Test va cache
-.pytest_cache/
-.mypy_cache/
-.coverage
-htmlcov/
-
-# Build
-build/
-dist/
-*.egg-info/
