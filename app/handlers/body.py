@@ -1,7 +1,14 @@
+from pathlib import Path
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import (
+    CallbackQuery,
+    FSInputFile,
+    Message,
+)
 
+from app.config import ASSETS_DIR
 from app.database.crud import get_user
 from app.database.db import SessionFactory
 from app.keyboards import body_menu
@@ -10,6 +17,7 @@ from app.services.health import (
     get_bmi_plan,
     get_calorie_text,
 )
+from app.services.visuals import create_bmi_card
 
 
 router = Router()
@@ -45,6 +53,39 @@ def get_gender_text(
     )
 
 
+def get_body_image(
+    gender: str | None,
+) -> Path | None:
+    if gender == "female":
+        possible_paths = [
+            ASSETS_DIR / "body" / "female.png",
+            ASSETS_DIR / "body" / "body_female.png",
+            ASSETS_DIR / "body_female.png",
+        ]
+    else:
+        possible_paths = [
+            ASSETS_DIR / "body" / "male.png",
+            ASSETS_DIR / "body" / "body_male.png",
+            ASSETS_DIR / "body_male.png",
+        ]
+
+    for path in possible_paths:
+        if path.exists() and path.is_file():
+            return path
+
+    return None
+
+
+async def load_user(
+    telegram_id: int,
+):
+    async with SessionFactory() as session:
+        return await get_user(
+            session,
+            telegram_id,
+        )
+
+
 @router.message(
     F.text.in_({
         "📊 Tana tahlili",
@@ -57,11 +98,9 @@ async def body_section(
 ) -> None:
     await state.clear()
 
-    async with SessionFactory() as session:
-        user = await get_user(
-            session,
-            message.from_user.id,
-        )
+    user = await load_user(
+        message.from_user.id,
+    )
 
     if user is None:
         await message.answer(
@@ -88,37 +127,57 @@ async def body_section(
         return
 
     if language == "ru":
+        title = "📊 АНАЛИЗ ТЕЛА"
+
         body = (
             f"👤 <b>{user.name}</b>\n"
-            f"⚧ {get_gender_text(user.gender, language)}\n"
+            f"⚧ Пол: "
+            f"<b>{get_gender_text(user.gender, language)}</b>\n"
             f"📏 Рост: <b>{user.height_cm:g} см</b>\n"
-            f"⚖️ Вес: <b>{user.current_weight_kg:g} кг</b>\n\n"
+            f"⚖️ Вес: "
+            f"<b>{user.current_weight_kg:g} кг</b>\n\n"
             f"📊 BMI: <b>{metrics.bmi:.2f}</b>\n"
-            f"🎯 Категория: <b>{plan['title']}</b>\n\n"
+            f"🎯 Категория: "
+            f"<b>{plan['title']}</b>\n\n"
             "Выберите нужный показатель."
         )
-
-        title = "📊 АНАЛИЗ ТЕЛА"
     else:
+        title = "📊 TANA TAHLILI"
+
         body = (
             f"👤 <b>{user.name}</b>\n"
-            f"⚧ {get_gender_text(user.gender, language)}\n"
+            f"⚧ Jins: "
+            f"<b>{get_gender_text(user.gender, language)}</b>\n"
             f"📏 Bo‘y: <b>{user.height_cm:g} sm</b>\n"
-            f"⚖️ Vazn: <b>{user.current_weight_kg:g} kg</b>\n\n"
+            f"⚖️ Vazn: "
+            f"<b>{user.current_weight_kg:g} kg</b>\n\n"
             f"📊 BMI: <b>{metrics.bmi:.2f}</b>\n"
-            f"🎯 Holat: <b>{plan['title']}</b>\n\n"
+            f"🎯 Holat: "
+            f"<b>{plan['title']}</b>\n\n"
             "Kerakli ko‘rsatkichni tanlang."
         )
 
-        title = "📊 TANA TAHLILI"
-
-    await message.answer(
-        card(
-            title,
-            body,
-        ),
-        reply_markup=body_menu(language),
+    body_image = get_body_image(
+        user.gender,
     )
+
+    if body_image is not None:
+        await message.answer_photo(
+            photo=FSInputFile(body_image),
+            caption=card(
+                title,
+                body,
+            ),
+            reply_markup=body_menu(language),
+        )
+    else:
+        await message.answer(
+            card(
+                title,
+                body,
+            ),
+            reply_markup=body_menu(language),
+        )
 
 
 @router.callback_query(
@@ -127,11 +186,9 @@ async def body_section(
 async def show_bmi(
     callback: CallbackQuery,
 ) -> None:
-    async with SessionFactory() as session:
-        user = await get_user(
-            session,
-            callback.from_user.id,
-        )
+    user = await load_user(
+        callback.from_user.id,
+    )
 
     if user is None:
         await callback.answer(
@@ -149,37 +206,111 @@ async def show_bmi(
         )
     except ValueError:
         await callback.answer(
-            "Profil ma’lumotlari to‘liq emas.",
+            (
+                "Profil ma’lumotlari to‘liq emas."
+                if language == "uz"
+                else
+                "Данные профиля заполнены не полностью."
+            ),
             show_alert=True,
         )
         return
 
+    remaining_weight = calculate_remaining_weight(
+        user,
+        metrics,
+    )
+
+    try:
+        bmi_image = create_bmi_card(
+            bmi=metrics.bmi,
+            category_key=metrics.category_key,
+            normal_min_weight=(
+                metrics.normal_min_weight
+            ),
+            normal_max_weight=(
+                metrics.normal_max_weight
+            ),
+            ideal_weight=(
+                metrics.ideal_weight
+            ),
+            remaining_weight=remaining_weight,
+            language=language,
+        )
+    except Exception:
+        bmi_image = None
+
     if language == "ru":
-        body = (
-            f"📊 BMI: <b>{metrics.bmi:.2f}</b>\n\n"
-            f"🎯 Категория:\n"
-            f"<b>{plan['title']}</b>\n\n"
-            "🌿 Каждый шаг приближает вас к результату."
-        )
-
         title = "📊 РЕЗУЛЬТАТ BMI"
-    else:
+
         body = (
-            f"📊 BMI: <b>{metrics.bmi:.2f}</b>\n\n"
-            f"🎯 Holat:\n"
+            f"📊 BMI: <b>{metrics.bmi:.2f}</b>\n"
+            f"🎯 Категория: "
             f"<b>{plan['title']}</b>\n\n"
-            "🌿 Har bir kichik qadam natijaga olib keladi."
+            f"✅ <b>{metrics.normal_min_weight}–"
+            f"{metrics.normal_max_weight} кг</b> — "
+            "диапазон нормального веса\n\n"
+            f"⭐ Идеальный вес: "
+            f"<b>{metrics.ideal_weight} кг</b>"
         )
 
+        if remaining_weight > 0:
+            body += (
+                "\n\n"
+                "🎯 Для достижения здорового веса:\n\n"
+                f"Вам необходимо сбросить ещё "
+                f"<b>{remaining_weight} кг</b>."
+            )
+        else:
+            body += (
+                "\n\n"
+                "💚 Ваш вес находится "
+                "в здоровом диапазоне."
+            )
+    else:
         title = "📊 BMI NATIJASI"
 
-    await callback.message.answer(
-        card(
-            title,
-            body,
-        ),
-        reply_markup=body_menu(language),
-    )
+        body = (
+            f"📊 BMI: <b>{metrics.bmi:.2f}</b>\n"
+            f"🎯 Holat: "
+            f"<b>{plan['title']}</b>\n\n"
+            f"✅ <b>{metrics.normal_min_weight}–"
+            f"{metrics.normal_max_weight} kg</b> — "
+            "norma vazn oralig‘i\n\n"
+            f"⭐ Ideal vazn: "
+            f"<b>{metrics.ideal_weight} kg</b>"
+        )
+
+        if remaining_weight > 0:
+            body += (
+                "\n\n"
+                "🎯 Sog‘lom vaznga erishish uchun:\n\n"
+                f"Siz yana <b>{remaining_weight} kg</b> "
+                "vazn tashlashingiz kerak."
+            )
+        else:
+            body += (
+                "\n\n"
+                "💚 Vazningiz sog‘lom oraliqda."
+            )
+
+    if bmi_image is not None:
+        await callback.message.answer_photo(
+            photo=FSInputFile(bmi_image),
+            caption=card(
+                title,
+                body,
+            ),
+            reply_markup=body_menu(language),
+        )
+    else:
+        await callback.message.answer(
+            card(
+                title,
+                body,
+            ),
+            reply_markup=body_menu(language),
+        )
 
     await callback.answer()
 
@@ -190,11 +321,9 @@ async def show_bmi(
 async def show_calories(
     callback: CallbackQuery,
 ) -> None:
-    async with SessionFactory() as session:
-        user = await get_user(
-            session,
-            callback.from_user.id,
-        )
+    user = await load_user(
+        callback.from_user.id,
+    )
 
     if user is None:
         await callback.answer(
@@ -212,31 +341,36 @@ async def show_calories(
         )
     except ValueError:
         await callback.answer(
-            "Profil ma’lumotlari to‘liq emas.",
+            (
+                "Profil ma’lumotlari to‘liq emas."
+                if language == "uz"
+                else
+                "Данные профиля заполнены не полностью."
+            ),
             show_alert=True,
         )
         return
 
     if language == "ru":
+        title = "⚡ ДНЕВНАЯ ЭНЕРГИЯ"
+
         body = (
-            f"🧍 Базовый обмен: "
-            f"<b>{metrics.bmr} ккал</b>\n"
-            f"⚖️ Поддержание веса: "
+            "🔥 Основной расход энергии организма:\n"
+            f"<b>{metrics.bmr} ккал</b>\n\n"
+            "⚖️ Для поддержания текущего веса:\n"
             f"<b>{metrics.maintenance_kcal} ккал</b>\n\n"
             f"{get_calorie_text(metrics, language)}"
         )
-
-        title = "⚡ ДНЕВНАЯ ЭНЕРГИЯ"
     else:
+        title = "⚡ KUNLIK ENERGIYA"
+
         body = (
-            f"🧍 Tananing asosiy energiya sarfi: "
-            f"<b>{metrics.bmr} kkal</b>\n"
-            f"⚖️ Hozirgi vaznni saqlash uchun: "
+            "🔥 Tananing asosiy energiya sarfi:\n"
+            f"<b>{metrics.bmr} kkal</b>\n\n"
+            "⚖️ Hozirgi vaznni saqlash uchun:\n"
             f"<b>{metrics.maintenance_kcal} kkal</b>\n\n"
             f"{get_calorie_text(metrics, language)}"
         )
-
-        title = "⚡ KUNLIK ENERGIYA"
 
     await callback.message.answer(
         card(
@@ -255,11 +389,9 @@ async def show_calories(
 async def show_weight_range(
     callback: CallbackQuery,
 ) -> None:
-    async with SessionFactory() as session:
-        user = await get_user(
-            session,
-            callback.from_user.id,
-        )
+    user = await load_user(
+        callback.from_user.id,
+    )
 
     if user is None:
         await callback.answer(
@@ -277,7 +409,12 @@ async def show_weight_range(
         )
     except ValueError:
         await callback.answer(
-            "Profil ma’lumotlari to‘liq emas.",
+            (
+                "Profil ma’lumotlari to‘liq emas."
+                if language == "uz"
+                else
+                "Данные профиля заполнены не полностью."
+            ),
             show_alert=True,
         )
         return
@@ -288,6 +425,8 @@ async def show_weight_range(
     )
 
     if language == "ru":
+        title = "🎯 НОРМА И ИДЕАЛЬНЫЙ ВЕС"
+
         body = (
             f"📏 Рост: <b>{user.height_cm:g} см</b>\n"
             f"⚖️ Текущий вес: "
@@ -302,14 +441,16 @@ async def show_weight_range(
         if remaining_weight > 0:
             body += (
                 "\n\n"
-                f"🎯 До верхней границы нормы:\n"
-                f"<b>{remaining_weight} кг</b>"
+                "🎯 Для достижения здорового веса:\n\n"
+                f"Вам необходимо сбросить ещё "
+                f"<b>{remaining_weight} кг</b>."
             )
-
-        title = "🎯 НОРМА И ИДЕАЛЬНЫЙ ВЕС"
     else:
+        title = "🎯 NORMA VA IDEAL VAZN"
+
         body = (
-            f"📏 Bo‘yingiz: <b>{user.height_cm:g} sm</b>\n"
+            f"📏 Bo‘yingiz: "
+            f"<b>{user.height_cm:g} sm</b>\n"
             f"⚖️ Hozirgi vazningiz: "
             f"<b>{user.current_weight_kg:g} kg</b>\n\n"
             f"✅ <b>{metrics.normal_min_weight}–"
@@ -322,11 +463,10 @@ async def show_weight_range(
         if remaining_weight > 0:
             body += (
                 "\n\n"
-                "🎯 Sog'lom vaznga erishish uchun:\n\n"
-                f"Siz yana <b>{remaining_weight} kg</b> vazn tashlashingiz kerak."
+                "🎯 Sog‘lom vaznga erishish uchun:\n\n"
+                f"Siz yana <b>{remaining_weight} kg</b> "
+                "vazn tashlashingiz kerak."
             )
-
-        title = "🎯 NORMA VA IDEAL VAZN"
 
     await callback.message.answer(
         card(
@@ -345,11 +485,9 @@ async def show_weight_range(
 async def show_full_analysis(
     callback: CallbackQuery,
 ) -> None:
-    async with SessionFactory() as session:
-        user = await get_user(
-            session,
-            callback.from_user.id,
-        )
+    user = await load_user(
+        callback.from_user.id,
+    )
 
     if user is None:
         await callback.answer(
@@ -367,7 +505,12 @@ async def show_full_analysis(
         )
     except ValueError:
         await callback.answer(
-            "Profil ma’lumotlari to‘liq emas.",
+            (
+                "Profil ma’lumotlari to‘liq emas."
+                if language == "uz"
+                else
+                "Данные профиля заполнены не полностью."
+            ),
             show_alert=True,
         )
         return
@@ -384,9 +527,12 @@ async def show_full_analysis(
     )
 
     if language == "ru":
+        title = "🧍 ПОЛНЫЙ АНАЛИЗ ТЕЛА"
+
         body = (
             f"📊 BMI: <b>{metrics.bmi:.2f}</b>\n"
-            f"🎯 Категория: <b>{plan['title']}</b>\n\n"
+            f"🎯 Категория: "
+            f"<b>{plan['title']}</b>\n\n"
             f"✅ {metrics.normal_min_weight}–"
             f"{metrics.normal_max_weight} кг — "
             "диапазон нормы\n"
@@ -402,8 +548,9 @@ async def show_full_analysis(
         if remaining_weight > 0:
             body += (
                 "\n\n"
-                f"🎯 До верхней границы нормы: "
-                f"<b>{remaining_weight} кг</b>"
+                "🎯 Для достижения здорового веса:\n\n"
+                f"Вам необходимо сбросить ещё "
+                f"<b>{remaining_weight} кг</b>."
             )
 
         body += (
@@ -411,12 +558,13 @@ async def show_full_analysis(
             "🌿 Продолжайте — каждый шаг "
             "приближает вас к цели."
         )
-
-        title = "🧍 ПОЛНЫЙ АНАЛИЗ ТЕЛА"
     else:
+        title = "🧍 TO‘LIQ TANA TAHLILI"
+
         body = (
             f"📊 BMI: <b>{metrics.bmi:.2f}</b>\n"
-            f"🎯 Holat: <b>{plan['title']}</b>\n\n"
+            f"🎯 Holat: "
+            f"<b>{plan['title']}</b>\n\n"
             f"✅ {metrics.normal_min_weight}–"
             f"{metrics.normal_max_weight} kg — "
             "norma vazn oralig‘i\n"
@@ -432,8 +580,9 @@ async def show_full_analysis(
         if remaining_weight > 0:
             body += (
                 "\n\n"
-                "🎯 Sog'lom vaznga erishish uchun:\n\n"
-                f"Siz yana <b>{remaining_weight} kg</b> vazn tashlashingiz kerak."
+                "🎯 Sog‘lom vaznga erishish uchun:\n\n"
+                f"Siz yana <b>{remaining_weight} kg</b> "
+                "vazn tashlashingiz kerak."
             )
 
         body += (
@@ -441,8 +590,6 @@ async def show_full_analysis(
             "🌿 Siz to‘g‘ri yo‘ldasiz. "
             "Har bir kichik qadam natijaga olib keladi."
         )
-
-        title = "🧍 TO‘LIQ TANA TAHLILI"
 
     await callback.message.answer(
         card(
